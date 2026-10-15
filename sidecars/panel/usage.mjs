@@ -114,15 +114,20 @@ export class UsageLedger{
 }
 export function weekStart(date){const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10);}
 
+import { PricingService } from './pricing.mjs';
+
 export class DesktopUsage{
-  constructor(store,ledger=new UsageLedger(),{host=null,discoverLocal=null,owns=()=>true,now=Date.now,sliceMs=3000,continueDelay=250}={}){
+  constructor(store,ledger=new UsageLedger(),{host=null,discoverLocal=null,owns=()=>true,now=Date.now,sliceMs=3000,continueDelay=250,pricing=null}={}){
     this.store=store;this.ledger=ledger;this.fingerprints=new Map();this.host=host;this.owns=owns;this.now=now;
+    this.pricing=pricing||new PricingService(ledger.directory);
+    void this.pricing.init();
     this.discoverLocal=discoverLocal||(()=>host?discoverLocalConversations({host}):Promise.resolve({conversations:[],errors:0}));
     this.sliceMs=sliceMs;this.continueDelay=continueDelay;this.fullRemaining=new Set();this.passSeen=new Set();this.passFailures=new Set();
   }
   syncing=false;lastSync=0;status='waiting';missingConversations=0;scope=null;scopeEpoch=null;forceQueued=false;disposed=false;continuation=null;
   async ingest(scope,id,raw){await this.ledger.ingest(scope,id,raw);}
-  sync(forceFull=false){
+  sync(forceFull=false,models=[]){
+    if(forceFull)void this.pricing.fetchCloud(models,true);
     if(this.disposed||!this.owns())return Promise.resolve();
     if(forceFull)this.forceQueued=true;
     if(this.pending)return this.pending;
@@ -205,7 +210,8 @@ export class DesktopUsage{
     if(this.scope!==this.store.identity||this.scopeEpoch!==this.store.epoch){this.lastSync=0;this.status='waiting';this.missingConversations=0;if(this.pending)this.forceQueued=true;}
     if(this.now()-this.lastSync>60000&&!this.continuation)void this.sync();
     const scope=this.store.identity,value=await this.ledger.summary(scope);
-    return scope===this.store.identity?{...value,syncing:this.syncing||!!this.continuation,status:this.status,missingConversations:this.missingConversations,persistenceError:this.store.usagePersistenceError===true}:null;
+    if(value?.models?.length)void this.pricing.fetchCloud(value.models,false);
+    return scope===this.store.identity?{...value,syncing:this.syncing||!!this.continuation,status:this.status,missingConversations:this.missingConversations,persistenceError:this.store.usagePersistenceError===true,pricing:this.pricing.snapshot(value?.models)}:null;
   }
-  dispose(){this.disposed=true;this.forceQueued=false;clearTimeout(this.continuation);this.continuation=null;}
+  dispose(){this.disposed=true;this.forceQueued=false;clearTimeout(this.continuation);this.continuation=null;this.pricing?.dispose?.();}
 }
