@@ -51,15 +51,8 @@ try{
  assert.equal(await page.locator('#usage-intro').isVisible(),true,'First use explains local data before acknowledgment');
  assert.ok((await page.locator('#usage-intro-history').textContent()).includes('本地历史对话'));
  const unchangedTotals=await page.locator('#totals').allTextContents();
- await page.locator('#locale').click();
- await page.waitForFunction(()=>testPrefs.language==='en');
- assert.equal(await page.locator('#title').textContent(),'Token usage');
- assert.equal(await page.locator('#timezone').textContent(),'Asia/Shanghai · Local usage');
- assert.equal((await page.locator('#totals').allTextContents()).join().replace(/[\p{Script=Han}\s]/gu,''),unchangedTotals.join().replace(/[\p{Script=Han}\s]/gu,''),'Locale changes never change usage totals');
- await page.screenshot({path:join(repo,'.data/usage/fixture-en.png')});
- await page.locator('#locale').click();
- await page.waitForFunction(()=>testPrefs.language==='zh-CN');
- assert.equal(await page.locator('#title').textContent(),'用量统计');
+ assert.equal(await page.locator('#locale').count(),0,'Language follows the global preference; the window has no duplicate toggle');
+ assert.ok(unchangedTotals.length>0);
  await page.locator('#usage-dashboard #close').click();await page.locator('[data-card=cache]').click();await page.locator('#open-usage').click();assert.equal(await page.locator('#usage-intro').isVisible(),true,'Closing without acknowledgment keeps the introduction');
  await page.evaluate(()=>window.failGuideSave=true);await page.locator('#usage-intro-done').click();await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot.getElementById('usage-intro-error').textContent.length>0);
  assert.equal(await page.locator('#usage-intro').isVisible(),true);assert.notEqual(await page.evaluate(()=>testPrefs.usageGuideDismissed),true);
@@ -133,7 +126,6 @@ try{
  await page.locator('#legend button').first().click();await page.mouse.move(80,80);await page.waitForTimeout(180);await page.screenshot({path:join(repo,'.data/usage/fixture-details-all-models.png')});
  await page.locator('[data-period=day]').click();await page.screenshot({path:join(repo,'.data/usage/fixture-details-day.png')});
  const stable=await page.evaluate(async()=>{const v=document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot;const bar=v.querySelector('.bar-column');testData.updatedAt=new Date().toISOString();await new Promise(r=>setTimeout(r,3500));return bar===v.querySelector('.bar-column');});assert.equal(stable,true,'Identical poll must preserve chart/focus DOM');
- await page.locator('#locale').click();await page.locator('[data-language-menu] [data-language="en"]').click();await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot.getElementById('title').textContent==='Token usage');
  await page.evaluate(()=>{document.body.style.background='#f5f5f5';document.body.style.color='#222';document.documentElement.dataset.theme='light';});await page.waitForTimeout(700);
  const lightColors=await page.locator('#legend .dot').evaluateAll(ns=>ns.map(n=>getComputedStyle(n).backgroundColor));assert.notDeepEqual(lightColors,colors,'Theme changes regenerate model colors');assert.equal(new Set(lightColors).size,5);
  await page.screenshot({path:join(repo,'.data/usage/fixture-light.png')});
@@ -154,7 +146,6 @@ try{
  await page.evaluate(()=>{testData={...testData,accountKey:'new-account',days:[],models:[],requests:0,totalTokens:0,todayTokens:0,weekTokens:0,monthTokens:0};});await page.waitForTimeout(3500);assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open),true,'Account changes retain the frame with fresh, isolated data');assert.equal(await page.locator('#totals .value').first().textContent(),'0Token');
  await page.evaluate(`window.__agPulseDispose();window.__agPulseUsageGuidePreview=true;(${extract(sources[2])})();`);await page.locator('[data-card=cache]').click();await page.locator('#open-usage').click();assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local acceptance mode replays the introduction without clearing user data');
  await page.locator('#usage-intro-done').click();await page.waitForTimeout(100);assert.equal(await page.locator('#usage-intro').isVisible(),false);
- await page.locator('#locale').click();await page.locator('[data-language-menu] [data-language="zh-CN"]').click();await page.waitForTimeout(150);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local replay: changing language resets the introduction');
  await page.locator('#usage-intro-done').click();await page.evaluate(()=>document.documentElement.style.setProperty('--primary','#46895e'));await page.waitForTimeout(400);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local replay: changing theme resets the introduction');
  await page.waitForTimeout(3500);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Polling must not dismiss a replayed introduction');
  assert.deepEqual(errors,[]);console.log(JSON.stringify({host:ide?'ide':'desktop',trustedTypes:ide,checks:'Usage entry and onboarding persistence/retry/local replay; hover dismissal and keyboard return; hourly overview with day pills; stable frame; model chart, pricing and component filter; polling; language/theme; narrow layout; account isolation; missing snapshots and composer replacement',passed:true}));

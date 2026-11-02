@@ -1,7 +1,7 @@
 // Zero-dependency UI gate: drives the system Chrome over CDP instead of
 // downloading a Playwright browser. Fixtures are synthetic; no user data is
 // read or written.
-import {readFile,mkdir,mkdtemp,rm} from 'node:fs/promises';
+import {readFile,mkdir,mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {join,dirname} from 'node:path';
@@ -22,7 +22,7 @@ const days=Array.from({length:120},(_,i)=>{
 });
 const hours=Object.fromEntries(Array.from({length:10},(_,i)=>[9+i,{uncached:(i+1)*1000,cacheRead:(i+1)*400,cacheWrite:0,output:(i+1)*200,total:(i+1)*1600,requests:i+1,models:{[models[0]]:{total:(i+1)*1600}}}]));
 days.at(-1).hours=hours;
-const fixture={accountKey:'fixture',today:'2026-10-11',timeZone:'Asia/Shanghai',models,days,todayTokens:45000,weekTokens:400000,monthTokens:700000,totalTokens:6000000,requests:500,firstDate:days[0].date,syncing:false,unknownRequests:0,partialRequests:0,unreadableFiles:0,hoursFrom:'2026-06-14'};
+const fixture={accountKey:'fixture',today:'2026-10-11',timeZone:'Asia/Shanghai',models,days,todayTokens:45000,weekTokens:400000,monthTokens:700000,totalTokens:6000000,requests:500,firstDate:days[0].date,syncing:false,unknownRequests:1,partialRequests:1,unreadableFiles:0,hoursFrom:'2026-06-14'};
 fixture.pricing={exchangeRate:7.1,exchangeRateUpdatedAt:'2026-10-10T00:00:00.000Z',lastSyncedAt:'2026-10-10T00:00:00.000Z',syncing:false,models:Object.fromEntries(models.map((m,j)=>[m,{prompt:1e-6*(j+1),completion:2e-6*(j+1),cacheRead:1e-7,cacheWrite:1e-7}]))};
 
 const html=`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#17181a;color:#ddd;font:13px 'Segoe UI';padding:50px}.rounded-composer{max-width:900px;margin:300px auto 0;background:#27282a;padding:12px;border-radius:18px}.editor{height:45px}.actions{display:flex;align-items:center;gap:5px}.left{display:flex;flex:1;min-width:0}.right{display:flex;gap:5px}button{background:transparent;border:0;color:inherit;height:28px}</style></head><body>
@@ -44,7 +44,7 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}`;
 const profile=await mkdtemp(join(tmpdir(),'ag-cdp-'));
 await mkdir(join(repo,'.data/usage'),{recursive:true});
-const child=spawn(chrome,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check',
+const child=spawn(chrome,['--headless=new','--window-size=1100,900','--disable-gpu','--no-first-run','--no-default-browser-check',
   '--disable-extensions','--disable-background-networking','--mute-audio',
   `--user-data-dir=${profile}`,'--remote-debugging-port=0',url],{stdio:'ignore'});
 
@@ -107,12 +107,23 @@ try{
   assert.ok(await v(`v.querySelectorAll('#hourly-plot .bar-column').length`)>=1,'hourly bars render');
   assert.ok((await v(`v.getElementById('hourly-summary').textContent`)).includes('峰值'),'peak summary');
   assert.ok((await v(`v.getElementById('totals').textContent`)).includes('¥'),'cost rendered in CNY');
+  assert.equal(await v(`!!v.getElementById('locale')||!!v.querySelector('.eyebrow')`),false,'no duplicate language toggle or English eyebrow');
+  assert.equal(await v(`v.getElementById('alert').hidden`),true,'partial records are not a warning');
+  assert.equal(await v(`v.getElementById('note').hidden`),true,'the overview stays free of historical footnotes');
+
+  const peakBefore=await v(`v.getElementById('hourly-summary').textContent`);
+  await evaluate(`testData.days[testData.days.length-1].hours[9].total=999999999`);
+  await sleep(4000);
+  assert.notEqual(await v(`v.getElementById('hourly-summary').textContent`),peakBefore,'an open window refreshes on its own');
+  const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await writeFile('/tmp/ag-usage-new.png',Buffer.from(shot.result.data,'base64'));
 
   await v(`v.getElementById('details-tab').click()`);
   await until(`(()=>{const sr=document.getElementById('ag-pulse-status-bar').shadowRoot;const v=sr.getElementById('usage-dashboard').firstElementChild.shadowRoot;return !v.getElementById('details').hidden;})()`,'details tab');
   assert.ok(await v(`v.querySelectorAll('.bar-column').length`)>=28,'detail chart bars');
   assert.ok(await v(`v.querySelectorAll('#table-body tr').length`)>=1,'table rows');
   assert.equal(await v(`v.querySelectorAll('#comp-filters button').length`),3,'component filters');
+  assert.ok((await v(`v.getElementById('note').textContent`)).includes('字段不完整'),'incomplete rows are explained on the details tab');
 
   const before=await v(`v.getElementById('totals').textContent`);
   await v(`v.querySelector('#comp-filters button').click()`);
@@ -123,7 +134,7 @@ try{
   const costCell=await v(`(v.querySelector('#table-body tr td:last-child')?.textContent)||''`);
   assert.ok(costCell.includes('¥'),'table cost column');
 
-  console.log(JSON.stringify({gate:'usage-ui',browser:chrome.replace('/Contents/MacOS/', ' '),checks:['entry','intro','hourly chart','peak summary','CNY cost','details tab','table','component filter'],passed:true,pageErrors:errors}));
+  console.log(JSON.stringify({gate:'usage-ui',browser:chrome.replace('/Contents/MacOS/', ' '),checks:['entry','intro','single language control','hourly chart','peak summary','live refresh','CNY cost','muted partial note','details tab','table','component filter'],passed:true,pageErrors:errors}));
   assert.deepEqual(errors,[]);
 }finally{
   try{ws?.close();}catch{}
