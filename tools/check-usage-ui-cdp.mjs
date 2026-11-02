@@ -116,6 +116,8 @@ try{
   await evaluate(`testData.days[testData.days.length-1].hours[9].total=999999999`);
   await sleep(4000);
   assert.notEqual(await v(`v.getElementById('hourly-summary').textContent`),peakBefore,'an open window refreshes on its own');
+  const fitOverview=await v(`(()=>{const p=v.querySelector('.page');return {scroll:p.scrollHeight,client:p.clientHeight};})()`);
+  assert.ok(fitOverview.scroll<=fitOverview.client+2,`overview must fit without scrolling (${fitOverview.scroll}>${fitOverview.client})`);
   const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
   await writeFile('/tmp/ag-usage-new.png',Buffer.from(shot.result.data,'base64'));
 
@@ -125,6 +127,8 @@ try{
   assert.ok(await v(`v.querySelectorAll('#table-body tr').length`)>=1,'table rows');
   assert.equal(await v(`v.querySelectorAll('#comp-filters button').length`),3,'component filters');
   assert.ok((await v(`v.getElementById('note').textContent`)).includes('时间未知'),'only genuinely missing timestamps are footnoted');
+  const fitDetails=await v(`(()=>{const p=v.querySelector('.page');return {scroll:p.scrollHeight,client:p.clientHeight};})()`);
+  assert.ok(fitDetails.scroll<=fitDetails.client+2,`details must fit without scrolling (${fitDetails.scroll}>${fitDetails.client})`);
 
   const before=await v(`v.getElementById('totals').textContent`);
   await v(`v.querySelector('#comp-filters button').click()`);
