@@ -10,7 +10,7 @@ import {tmpdir} from 'node:os';
 import assert from 'node:assert/strict';
 
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..');
-const files=['compat/i18n.cjs','compat/theme.cjs','compat/inline-widget.cjs','compat/usage-ui.cjs'];
+const files=['compat/i18n.cjs','compat/theme.cjs','compat/inline-widget.cjs','compat/usage-ui.local.cjs'];
 const sources=await Promise.all(files.map(f=>readFile(join(repo,f),'utf8')));
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
 const chrome=process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

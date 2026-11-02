@@ -7,7 +7,7 @@ import {mkdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {trajectoryMetrics} from '../sidecars/panel/metrics.mjs';
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..'),require=createRequire(import.meta.url),preview=process.argv.includes('--preview');
-const source=['i18n','theme','usage-ui','inline-widget'].map(n=>require(join(repo,'compat',n+'.cjs')).toString());
+const source=['i18n','theme','usage-ui.local','inline-widget'].map(n=>require(join(repo,'compat',n+'.cjs')).toString());
 const install=`window.__agPulseI18nFactory=${source[0]};window.__agPulseThemeFactory=${source[1]};window.__agPulseUsageFactory=${source[2]};(${source[3]})();`;
 const id='11111111-1111-1111-1111-111111111111';
 const speed=trajectoryMetrics({trajectory:{cascadeId:id,steps:[],generatorMetadata:[{chatModel:{modelDisplayName:'Gemini',streamingDuration:'2s',usage:{inputTokens:1000,cacheReadTokens:600,responseOutputTokens:100,outputTokens:100,apiProvider:'API_PROVIDER_GOOGLE_GEMINI'},chatStartMetadata:{contextWindowMetadata:{estimatedTokensUsed:24000,maxContextTokens:256000}}}}]}});

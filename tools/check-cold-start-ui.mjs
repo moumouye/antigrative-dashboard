@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import {RuntimeUi,makeRendererSource} from '../compat/runtime-ui.mjs';
 import {trajectoryMetrics} from '../sidecars/panel/metrics.mjs';
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..');
-const sources=await Promise.all(['i18n.cjs','inline-widget.cjs','theme.cjs','usage-ui.cjs'].map(f=>readFile(join(repo,'compat',f),'utf8')));
+const sources=await Promise.all(['i18n.cjs','inline-widget.cjs','theme.cjs','usage-ui.local.cjs'].map(f=>readFile(join(repo,'compat',f),'utf8')));
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
 const composer=`<div class="rounded-composer"><div role="combobox" aria-label="Message input" contenteditable="true" class="editor"></div><div class="actions"><div class="left"><button aria-label="Add context">+</button><button data-testid="model-selector-trigger">Gemini</button></div><div class="right"><button aria-label="Send message">→</button></div></div></div>`;
 const html=`<!doctype html><meta charset="utf-8"><style>body{background:#181a1f;color:#eee;font:14px sans-serif}.rounded-composer{margin:200px auto;width:900px;padding:12px;background:#27292f}.editor{height:70px}.actions,.left,.right{display:flex;align-items:center;gap:6px}.left{flex:1;min-width:0}button{color:inherit;background:none;border:0;height:28px}</style><body><script>setTimeout(()=>document.body.insertAdjacentHTML('beforeend',${JSON.stringify(composer)}),400);</script>`;

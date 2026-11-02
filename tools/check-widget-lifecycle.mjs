@@ -9,7 +9,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..');
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
-const [i18n,theme,usage]=await Promise.all(['i18n','theme','usage-ui'].map(n=>readFile(join(repo,'compat',n+'.cjs'),'utf8')));
+const [i18n,theme,usage]=await Promise.all(['i18n','theme','usage-ui.local'].map(n=>readFile(join(repo,'compat',n+'.cjs'),'utf8')));
 const widget=process.env.AG_PULSE_WIDGET_SOURCE?await readFile(process.env.AG_PULSE_WIDGET_SOURCE,'utf8'):
   process.argv.includes('--source-head')?execFileSync('git',['show','HEAD:compat/inline-widget.cjs'],{cwd:repo,encoding:'utf8'}):await readFile(join(repo,'compat/inline-widget.cjs'),'utf8');
 const id='11111111-1111-1111-1111-111111111111';

@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const usageUiSource = readFileSync(join(__dirname, '../../../compat/usage-ui.cjs'), 'utf8');
+const usageUiSource = readFileSync(join(__dirname, '../../../compat/usage-ui.local.cjs'), 'utf8');
 const inlineWidgetSource = readFileSync(join(__dirname, '../../../compat/inline-widget.cjs'), 'utf8');
 
 test('usage-ui CSS includes parallel horizontal layout for chart controls and date ranges', () => {
