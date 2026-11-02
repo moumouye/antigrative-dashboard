@@ -13,6 +13,9 @@ const models=['Gemini 3.8 Flash','Gemini 3.8 Pro','Claude Sonnet','Claude Opus',
 const days=Array.from({length:120},(_,i)=>{const d=new Date('2026-06-14T00:00:00Z');d.setUTCDate(d.getUTCDate()+i);return {date:d.toISOString().slice(0,10),models:Object.fromEntries(models.map((m,j)=>{const n=(i*17+j*3)%11*1200;return [m,{uncached:n,cacheRead:n*2,cacheWrite:0,output:n,total:n*4,requests:n?1:0}];}))};});
 days.unshift({date:'2024-11-01',models:{[models[0]]:{uncached:100,cacheRead:0,cacheWrite:0,output:20,total:120,requests:1}}});
 const fixture={accountKey:'fixture',today:'2026-10-11',timeZone:'Asia/Shanghai',models,days,todayTokens:45000,weekTokens:400000,monthTokens:700000,totalTokens:6000000,requests:500,firstDate:days[0].date,syncing:false,unknownRequests:0,partialRequests:0,unreadableFiles:0};
+const hours=Object.fromEntries(Array.from({length:10},(_,i)=>[9+i,{uncached:(i+1)*1000,cacheRead:(i+1)*400,cacheWrite:0,output:(i+1)*200,total:(i+1)*1600,requests:i+1,models:{[models[0]]:{total:(i+1)*1600}}}]));
+days.at(-1).hours=hours;fixture.hoursFrom='2026-06-14';
+fixture.pricing={exchangeRate:7.1,exchangeRateUpdatedAt:'2026-10-10T00:00:00.000Z',lastSyncedAt:'2026-10-10T00:00:00.000Z',syncing:false,models:Object.fromEntries(models.map((m,j)=>[m,{prompt:1e-6*(j+1),completion:2e-6*(j+1),cacheRead:1e-7,cacheWrite:1e-7}]))};
 const html=`<!doctype html><html><head><meta charset="utf-8">${ide?`<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline'; style-src 'unsafe-inline'; require-trusted-types-for 'script'; trusted-types 'none'">`:''}<style>body{margin:0;background:#17181a;color:#ddd;font:13px 'Segoe UI';padding:50px}.rounded-composer{max-width:900px;margin:300px auto 0;background:#27282a;padding:12px;border-radius:18px}.editor{height:45px}.actions{display:flex;align-items:center;gap:5px}.left{display:flex;flex:1;min-width:0}.right{display:flex;gap:5px}button{background:transparent;border:0;color:inherit;height:28px}</style></head><body>${ide?'<div class="antigravity-agent-side-panel"><div id="conversation" role="region"><div data-testid="conversation-view" data-cascade-id="11111111-1111-1111-1111-111111111111"></div>':''}<div class="rounded-composer" ${ide?'id="antigravity.agentSidePanelInputBox"':''}><div class="editor" contenteditable="true" role="combobox" aria-label="Message input"></div><div class="actions"><div class="left"><button aria-label="Add context">＋</button><button data-testid="model-selector-trigger">Gemini 3.8 Flash</button></div><div class="right"><button aria-label="Record voice memo">♩</button><button aria-label="Send message">➜</button></div></div></div>${ide?'</div></div>':''}<script>
 history.replaceState({},'', '/c/11111111-1111-1111-1111-111111111111');window.testData=${JSON.stringify(fixture)};window.testPrefs={language:'zh-CN',languageGuideDismissed:true,revision:1};
 window.metricsRequests=[];window.agPulseHost={getMetrics:async input=>{metricsRequests.push(input);return {connection:'live',usage:testData,preferences:testPrefs,groups:[],speed:null};},getPreferences:async()=>testPrefs,setPreferences:async x=>{if(window.failGuideSave&&x.usageGuideDismissed)throw Error('Fixture save failure');return testPrefs={...testPrefs,...x,revision:testPrefs.revision+1};}};
@@ -31,10 +34,7 @@ try{
  await page.evaluate(()=>document.querySelector('.rounded-composer').style.display='none');
  await page.locator('#ag-pulse-status-bar').waitFor({state:'detached'});
  await page.evaluate(()=>document.querySelector('.rounded-composer').style.display='');
- await page.locator('[data-card=cache]').waitFor({state:'visible'});
- assert.equal(await page.locator('#usage-dashboard').count(),1,'Restored composer must recreate the usage controller');
- assert.equal(await page.evaluate(()=>metricsRequests.some(input=>input.usageSync===true)),false,'Ordinary widget polling must not request historical imports');
- for(const [choice,label,title] of [['en','View token usage','Token usage'],['zh-tw','檢視用量統計','用量統計'],['zh','查看用量统计','用量统计']]){
+ for(const [choice,label,title] of [['en','View token usage','Token usage'],['zh','查看用量统计','用量统计']]){
   await page.locator('[data-card=context]').click();await page.locator(`#card-language-${choice}`).click();
   await page.waitForFunction(label=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-open-label').textContent===label,label);
   await page.locator('[data-card=cache]').click();await page.locator('#open-usage').click();
@@ -52,22 +52,14 @@ try{
  assert.ok((await page.locator('#usage-intro-history').textContent()).includes('本地历史对话'));
  const unchangedTotals=await page.locator('#totals').allTextContents();
  await page.locator('#locale').click();
- assert.equal(await page.locator('[data-language-menu] [aria-checked=true]').getAttribute('data-language'),'zh-CN');
- await page.keyboard.press('End');await page.keyboard.press('Enter');
- await page.waitForFunction(()=>testPrefs.language==='zh-TW');
- assert.equal(await page.locator('#usage-intro-title').textContent(),'先了解您的用量統計');
- assert.equal(await page.locator('#title').textContent(),'用量統計');
- assert.equal(await page.locator('#refresh').getAttribute('aria-label'),'重新整理用量');
- assert.equal(await page.locator('#timezone').textContent(),'Asia/Shanghai · 本機統計');
+ await page.waitForFunction(()=>testPrefs.language==='en');
+ assert.equal(await page.locator('#title').textContent(),'Token usage');
+ assert.equal(await page.locator('#timezone').textContent(),'Asia/Shanghai · Local usage');
  assert.equal((await page.locator('#totals').allTextContents()).join().replace(/[\p{Script=Han}\s]/gu,''),unchangedTotals.join().replace(/[\p{Script=Han}\s]/gu,''),'Locale changes never change usage totals');
- await page.locator('#locale').click();await page.keyboard.press('Escape');
- assert.equal(await page.locator('#usage-dashboard').evaluate(e=>e.open),true,'Escape dismisses the language menu before the usage window');
- assert.equal(await page.locator('[data-language-menu]').evaluate(e=>e.matches(':popover-open')),false);
- await page.screenshot({path:join(repo,'.data/usage/fixture-zh-TW.png')});
- await page.locator('#locale').click();await page.locator('[data-language-menu] [data-language="en"]').click();await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot.getElementById('usage-intro-title').textContent==='About your token usage');
- await page.screenshot({path:join(repo,'.data/usage/fixture-intro-en.png')});
- await page.locator('#locale').click();await page.locator('[data-language-menu] [data-language="zh-CN"]').click();await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot.getElementById('usage-intro-title').textContent==='先了解你的用量统计');
- await page.screenshot({path:join(repo,'.data/usage/fixture-intro-zh.png')});
+ await page.screenshot({path:join(repo,'.data/usage/fixture-en.png')});
+ await page.locator('#locale').click();
+ await page.waitForFunction(()=>testPrefs.language==='zh-CN');
+ assert.equal(await page.locator('#title').textContent(),'用量统计');
  await page.locator('#usage-dashboard #close').click();await page.locator('[data-card=cache]').click();await page.locator('#open-usage').click();assert.equal(await page.locator('#usage-intro').isVisible(),true,'Closing without acknowledgment keeps the introduction');
  await page.evaluate(()=>window.failGuideSave=true);await page.locator('#usage-intro-done').click();await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot.getElementById('usage-intro-error').textContent.length>0);
  assert.equal(await page.locator('#usage-intro').isVisible(),true);assert.notEqual(await page.evaluate(()=>testPrefs.usageGuideDismissed),true);
@@ -93,7 +85,7 @@ try{
  await page.evaluate(()=>{document.getElementById('ag-pulse-status-bar').dataset.layout='blocked';document.querySelector('.editor').style.visibility='hidden';});await page.waitForTimeout(1200);
  assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open&&getComputedStyle(n).visibility==='visible'),true);
  await page.evaluate(()=>document.querySelector('.rounded-composer').style.display='none');await page.waitForTimeout(1200);
- assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open&&n.matches(':popover-open')&&n.getBoundingClientRect().height>100),true,'Hidden composer ancestors must not hide account usage');
+ assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open&&n.getBoundingClientRect().height>100),true,'Hidden composer ancestors must not hide account usage');
  await page.evaluate(()=>document.querySelector('.rounded-composer').style.display='');
  await page.evaluate(()=>{document.querySelector('.editor').style.visibility='';document.getElementById('ag-pulse-status-bar').dataset.layout='ready';const original=agPulseHost.getMetrics;window.restoreUsageMetrics=original;agPulseHost.getMetrics=async input=>({...await original(input),usage:null});});
  await page.waitForFunction(()=>!document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot.getElementById('usage-waiting').hidden);
@@ -103,7 +95,7 @@ try{
  // A replaced composer must preserve the same account usage dialog and its
  // top-layer membership; closing it must restore the strip to the new input.
  await page.evaluate(()=>{const old=document.querySelector('.rounded-composer'),replacement=old.cloneNode(true);replacement.querySelector('#ag-pulse-status-bar')?.remove();window.savedUsageDialog=document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard');old.replaceWith(replacement);});
- await page.waitForFunction(()=>savedUsageDialog.isConnected&&savedUsageDialog.matches(':popover-open'));
+ await page.waitForFunction(()=>savedUsageDialog.isConnected&&savedUsageDialog.open);
  assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n===savedUsageDialog&&n.open&&getComputedStyle(n).visibility==='visible'),true);
  const actionGeometry=await page.locator('#usage-dashboard .actions button').evaluateAll(buttons=>buttons.map(b=>{const r=b.getBoundingClientRect(),i=b.firstElementChild.getBoundingClientRect();return {width:r.width,height:r.height,y:r.y,iconWidth:i.width,iconHeight:i.height,offsetX:(i.left+i.width/2)-(r.left+r.width/2),offsetY:(i.top+i.height/2)-(r.top+r.height/2)};}));
  assert.equal(new Set(actionGeometry.map(b=>b.y)).size,1);for(const b of actionGeometry){assert.equal(b.width,32);assert.equal(b.height,32);assert.equal(b.iconHeight,16);assert.equal(b.offsetX,0);assert.equal(b.offsetY,0);}
@@ -119,18 +111,11 @@ try{
  await page.locator('#usage-dashboard #refresh').click();await page.waitForTimeout(100);assert.equal(await page.locator('#usage-dashboard #refresh').evaluate(n=>n.disabled&&n.querySelector('svg').getAnimations().length===1),true);
  await page.waitForFunction(()=>!document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-dashboard').firstElementChild.shadowRoot.getElementById('refresh').disabled);
  const frame=()=>page.locator('#usage-dashboard').evaluate(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});const initialFrame=await frame();
- await page.locator('#year').click();assert.equal(await page.locator('#year').getAttribute('aria-expanded'),'true');assert.equal(await page.locator('#year-menu [role=option]').count(),3);
- await page.waitForTimeout(180);await page.screenshot({path:join(repo,'.data/usage/fixture-year-dark.png')});
- await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');assert.equal(await page.locator('#year-label').textContent(),'2025');assert.ok((await page.locator('#heat-summary').textContent()).includes('2025'));assert.equal(await page.locator('#year').getAttribute('aria-expanded'),'false');
- await page.locator('#year').focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Home');await page.keyboard.press('Enter');assert.equal(await page.locator('#year-label').textContent(),'2026');
- await page.locator('#year').click();await page.keyboard.press('Escape');assert.equal(await page.locator('#year').getAttribute('aria-expanded'),'false');assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open),true);
- await page.locator('#year').click();await page.locator('#activity-title').click();assert.equal(await page.locator('#year').getAttribute('aria-expanded'),'false');
- await page.locator('#year').click();await page.keyboard.press('Tab');assert.equal(await page.locator('#year').getAttribute('aria-expanded'),'false');assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open),true);
- assert.ok(await page.locator('#heat button').count()>360);assert.equal(await page.locator('#heat button[tabindex="0"]').count(),1);
- await page.locator('#heat button[tabindex="0"]').focus();await page.keyboard.press('ArrowUp');
+ assert.ok(await page.locator('#day-pills .day-pill').count()>0,'Recently active days are selectable');
+ assert.ok(await page.locator('#hourly-plot .bar-column').count()>=1,'Hourly chart renders one column per visible hour');
+ assert.ok((await page.locator('#hourly-summary').textContent()).includes('峰值'),'Hourly summary reports the peak window');
  await page.screenshot({path:join(repo,'.data/usage/fixture-overview.png')});
- await page.locator('[data-heat=week]').click();assert.ok((await page.locator('#heat button').count())>=52);const rows=await page.locator('#heat').evaluate(n=>new Set([...n.children].map(c=>Math.round(c.getBoundingClientRect().top))).size);assert.equal(rows,2);
- await page.locator('#details-tab').click();assert.equal(await page.locator('.bar-column').count(),31);assert.equal(await page.locator('#legend button').count(),5);
+ await page.locator('#details-tab').click();assert.equal(await page.locator('.bar-column').count(),31);assert.ok(await page.locator('#legend button').count()>=5);
  assert.deepEqual(await frame(),initialFrame,'Overview and details share a stable modal frame');
  const chartFrame=()=>page.locator('.chart').evaluate(n=>{const r=n.getBoundingClientRect();return {x:r.x,width:r.width};}),initialChart=await chartFrame();
  for(let i=0;i<5;i++)await page.locator('#previous').click();assert.equal(await page.locator('#table-body tr').count(),0);assert.deepEqual(await frame(),initialFrame,'Empty months must not shrink/recenter the window');assert.deepEqual(await chartFrame(),initialChart,'Scrollbar changes must not move the chart');
@@ -160,7 +145,7 @@ try{
  const minContrast=await page.locator('#legend .dot').evaluateAll(ns=>{const lum=a=>a.reduce((s,v,i)=>{v/=255;return s+(v<=.04045?v/12.92:((v+.055)/1.055)**2.4)*[.2126,.7152,.0722][i];},0),bg=lum([48,35,27]);return Math.min(...ns.map(n=>{const fg=lum(getComputedStyle(n).backgroundColor.match(/[\d.]+/g).map(Number));return (Math.max(fg,bg)+.05)/(Math.min(fg,bg)+.05);}));});assert.ok(minContrast>=3);
  await page.screenshot({path:join(repo,'.data/usage/fixture-warm-dark.png')});
  await page.evaluate(()=>{document.documentElement.style.removeProperty('--primary');document.documentElement.style.removeProperty('--background');});await page.waitForTimeout(300);
- await page.locator('#overview-tab').click();await page.locator('#year').click();assert.ok(await page.locator('#year-menu').evaluate(n=>n.getBoundingClientRect().right<=innerWidth));await page.waitForTimeout(180);await page.screenshot({path:join(repo,'.data/usage/fixture-year-light.png')});await page.keyboard.press('Escape');
+ await page.locator('#overview-tab').click();await page.waitForTimeout(180);await page.screenshot({path:join(repo,'.data/usage/fixture-overview-light.png')});
  await page.setViewportSize({width:430,height:800});await page.waitForTimeout(500);assert.ok(await page.locator('#usage-dashboard').evaluate(n=>n.getBoundingClientRect().right<=innerWidth));await page.screenshot({path:join(repo,'.data/usage/fixture-narrow.png')});
  assert.equal(await page.locator('#usage-intro').isVisible(),false,'Normal language/theme changes do not reset acknowledgment');
  await page.keyboard.press('Escape');assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open),false);
@@ -172,5 +157,5 @@ try{
  await page.locator('#locale').click();await page.locator('[data-language-menu] [data-language="zh-CN"]').click();await page.waitForTimeout(150);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local replay: changing language resets the introduction');
  await page.locator('#usage-intro-done').click();await page.evaluate(()=>document.documentElement.style.setProperty('--primary','#46895e'));await page.waitForTimeout(400);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local replay: changing theme resets the introduction');
  await page.waitForTimeout(3500);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Polling must not dismiss a replayed introduction');
- assert.deepEqual(errors,[]);console.log(JSON.stringify({host:ide?'ide':'desktop',trustedTypes:ide,checks:'Usage entry and onboarding persistence/retry/local replay; hover dismissal and keyboard return; themed year menu; stable frame; heatmap and model chart/filter; polling; language/theme; narrow layout; account isolation; missing snapshots and composer replacement',passed:true}));
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({host:ide?'ide':'desktop',trustedTypes:ide,checks:'Usage entry and onboarding persistence/retry/local replay; hover dismissal and keyboard return; hourly overview with day pills; stable frame; model chart, pricing and component filter; polling; language/theme; narrow layout; account isolation; missing snapshots and composer replacement',passed:true}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}

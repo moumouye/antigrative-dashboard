@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
-import {UsageLedger,DesktopUsage,usageRecords,dateKey} from '../usage.mjs';
+import {UsageLedger,DesktopUsage,usageRecords,dateKey,UNIFIED_SCOPE} from '../usage.mjs';
 import {MetricsStore} from '../store.mjs';
 const scope=s=>createHash('sha256').update(s).digest('hex'),account=scope('account A');
 const id='11111111-1111-1111-1111-111111111111',other='22222222-2222-2222-2222-222222222222';
@@ -17,7 +17,7 @@ test('usage survives restart, upserts, and deduplicates across conversations',as
  await ledger.ingest(account,id,raw({usage:{outputTokens:100}}));summary=await ledger.summary(account);assert.equal(summary.totalTokens,1120);
  await ledger.ingest(account,id,{trajectory:{generatorMetadata:[]}});assert.equal((await ledger.summary(account)).totalTokens,1120);
  const content=await readFile(ledger.file(account,id),'utf8');assert.equal(content.includes('private-request-id'),false);assert.equal(content.includes(id),false);
- assert.equal((await ledger.summary(scope('other'))).totalTokens,0);assert.throws(()=>ledger.file(account,'../escape'));
+ const unified=await ledger.summary(scope('other'));assert.equal(unified.totalTokens,1120);assert.equal(unified.accountKey,scope('other'));assert.throws(()=>ledger.file(account,'../escape'));
 });
 test('request time wins, planner-created is fallback, and unknown dates stay out of today',async t=>{
  assert.equal(dateKey(Date.parse('2026-10-10T16:05:00Z')),'2026-10-11');
@@ -44,7 +44,7 @@ test('backfill refreshes changed trajectories and isolates an account change in 
  const tracker=new DesktopUsage(store,ledger);await tracker.sync();await tracker.sync();assert.equal(calls,1);assert.equal((await tracker.snapshot()).totalTokens,1100);
  store.listConversations=async()=>[{id:other,modifiedAt:'two',status:'DONE'}];store.client.trajectory=()=>new Promise(r=>{release=r;});
  const pending=tracker.sync();await new Promise(r=>setImmediate(r));store.identity=scope('B');store.epoch++;release(raw());await pending;
- assert.equal((await ledger.summary(store.identity)).totalTokens,0);
+ assert.equal((await ledger.summary(store.identity)).totalTokens,1100);
 });
 test('MetricsStore forwards authenticated raw records and preserves live speed on ledger failure',async()=>{
  const history={load:async()=>null,save:async()=>null};let scopeSeen=null;
@@ -59,4 +59,24 @@ test('IDE usage keeps a separate ledger and source across collector restarts',as
  const tracker=new DesktopUsage(store,ide);await tracker.sync();assert.equal((await tracker.snapshot()).source,'ide-local');assert.equal((await tracker.snapshot()).totalTokens,1100);
  assert.equal((await desktop.summary(account)).totalTokens,0);
  const restarted=new DesktopUsage(store,new UsageLedger(ide.directory,{source:'ide-local'}));await restarted.sync();assert.equal((await restarted.snapshot()).totalTokens,1100);assert.equal((await restarted.snapshot()).requests,1);
+});
+test('every account on the device resolves to the one unified ledger directory',async t=>{
+ const ledger=await fixture(t),a=scope('account A'),b=scope('account B');
+ await ledger.ingest(a,id,raw());
+ const summary=await new UsageLedger(ledger.directory).summary(b,Date.parse('2026-10-11T02:00:00Z'));
+ assert.equal(summary.totalTokens,1100);assert.equal(summary.accountKey,b);
+ assert.deepEqual((await readdir(ledger.directory)).filter(name=>/^[a-f0-9]{64}$/.test(name)),[UNIFIED_SCOPE]);
+});
+test('legacy split account directories are merged into the unified ledger and archived',async t=>{
+ const ledger=await fixture(t),a=scope('account A'),b=scope('account B'),name=createHash('sha256').update(id).digest('hex')+'.json';
+ for(const [owner,tokens] of [[a,10],[b,20]]){
+  await mkdir(join(ledger.directory,owner),{recursive:true});
+  const record={id:createHash('sha256').update('row'+tokens).digest('hex'),at:Date.parse('2026-10-10T16:00:00Z'),model:'Gemini 3.8',uncached:tokens,cacheRead:0,cacheWrite:0,output:1,partial:false,timeBasis:'request-start'};
+  await writeFile(join(ledger.directory,owner,name),JSON.stringify({schema:1,account:owner,records:[record]}));
+ }
+ const summary=await ledger.summary(a,Date.parse('2026-10-11T02:00:00Z'));
+ assert.equal(summary.totalTokens,32);assert.equal(summary.requests,2);
+ const names=await readdir(ledger.directory);
+ assert.ok(names.includes(UNIFIED_SCOPE));assert.equal(names.filter(n=>n===a||n===b).length,0);
+ assert.equal(names.filter(n=>n.startsWith('.merged-')).length,2);
 });

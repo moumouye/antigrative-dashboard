@@ -18,7 +18,7 @@ let debugPort=0;
 const client=new IdeClient({profile,debugPort:()=>debugPort});
 const ownership=new SidecarOwner(data);
 const store=new MetricsStore(client,{history:new SessionHistory(join(data,'history-v1')),transcripts:new TranscriptReader({root:transcriptBrainRoot('ide')}),owns:()=>ownership.owns()});
-const usage=new LocalUsage(store,new UsageLedger(join(data,'usage-v1'),{source:'ide-local'}),{host:'ide',owns:()=>ownership.owns()});
+const usage=new LocalUsage(store,new UsageLedger(join(data,'usage-v1'),{source:'ide-local'}),{host:'ide',owns:()=>ownership.owns(),pricing:true});
 store.onTrajectory=async(scope,id,raw,options={})=>{
   const {isCurrent=()=>true}=options;
   if(isCurrent()!==true)return;

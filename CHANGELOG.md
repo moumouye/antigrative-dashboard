@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.19 — 2026-11-02
+
+Local build rebased onto the official v0.8.18 collection kernel. It keeps the enhanced dashboard UI (hourly activity chart, estimated cost, component filters, sortable table) and adopts the upstream background statistics, delegation and platform fixes.
+
+- Keep one device-level `usage-v1` ledger across accounts. Ownership and freshness guards stay bound to the authenticated identity; only the physical directory is unified. Legacy per-account directories are merged on first read and archived under `.merged-<uuid>/` instead of being deleted.
+- Restore hourly detail in both aggregation paths: the in-memory JSON summary and the disk worker's SQLite summary now emit identical `days[].hours` buckets. Detail is limited to the most recent 120 days and to a separate 1.5 MiB result budget, so the 4 MiB summary cap and `summaryStale` semantics are unchanged.
+- Restore model pricing and CNY cost estimates. `PricingService` is mounted explicitly by the App and IDE entrypoints, so tests, CLI and offline runs never reach the pricing endpoints.
+- Normalize the `-n` model-name suffix in the shared `cleanModel` helper so historical rows and new rows group under one model.
+- The usage window shows a rebuilding state while a disk-backed summary publishes nulls, and labels days outside the hourly window instead of reporting zero usage.
+- Carry the v0.8.8–v0.8.18 fixes: bounded history import, queue/checkpoint hardening, delegated subagent usage, IDE 2.6 `agy --hub`, Windows TUN discovery, junction-safe updates and Argon weekly quotas.
+
 ## 0.8.18 — 2026-11-01
 
 - Add dedicated Argon weekly-quota presentation across App, IDE and CLI using the returned `gemini-argon-wtu-weekly` bucket. Weekly-only groups omit the five-hour panel; zero remains exhausted. Accounts without a dedicated Argon group retain the returned shared Gemini group and its original label/windows.

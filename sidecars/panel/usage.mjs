@@ -9,10 +9,15 @@ import {discoverLocalConversations,conversationId} from './local-conversations.m
 import {setImmediate as yieldToLiveRequests} from 'node:timers/promises';
 import {delegatedIds} from './delegation.mjs';
 import {collectionFailure} from './collection-state.mjs';
+import {PricingService} from './pricing.mjs';
 const HASH=/^[a-f0-9]{64}$/,GUID=/^[a-f0-9-]{36}$/i;
 const hash=value=>createHash('sha256').update(value).digest('hex');
+// Every account on this device shares one physical ledger. Ownership and
+// freshness guards still use the authenticated account identity; only the
+// directory written to and read from is unified.
+export const UNIFIED_SCOPE=hash('antigravity:local:unified:usage');
 const keys=['uncached','cacheRead','cacheWrite','output'];
-const cleanModel=value=>String(value||'Unknown').replace(/[\x00-\x1f\x7f]/g,'').slice(0,120);
+export const cleanModel=value=>String(value||'Unknown').replace(/[\x00-\x1f\x7f]/g,'').replace(/-n$/,'').slice(0,120);
 const stamp=value=>typeof value==='string'&&/^20\d\d-\d\d-\d\dT/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
 const sum=r=>keys.reduce((n,k)=>n+(r[k]??0),0);
 function mergeUsageRow(row,old){const record={...row,at:row.at??old?.at??null,timeBasis:row.at===null&&old?.at!==null&&old?.at!==undefined?old.timeBasis:row.timeBasis};for(const key of keys)record[key]=row[key]??old?.[key]??null;return record;}
@@ -56,6 +61,15 @@ export function dateKey(time,zone='Asia/Shanghai'){
   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(time);
   const get=key=>parts.find(p=>p.type===key).value;return `${get('year')}-${get('month')}-${get('day')}`;
 }
+export function hourKey(time,zone='Asia/Shanghai'){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}).formatToParts(time);
+  return parseInt(parts.find(p=>p.type==='hour').value,10);
+}
+// Hourly detail is a bounded addition to the summary: older days keep their
+// daily totals but omit per-hour buckets, which keeps the result inside the
+// worker's transfer budget for long-lived ledgers.
+export const HOUR_DAYS=120;
+const hourFrom=(now,zone)=>dateKey(now-HOUR_DAYS*86400000,zone);
 export function usageRecords(raw,conversationId,{maxRows=Infinity,maxBytes=Infinity}={}){
   const trajectory=raw?.trajectory||{},rows=new Map(),steps=trajectory.steps||[];let bytes=0;
   for(const [index,g] of (trajectory.generatorMetadata||[]).entries()){
@@ -90,9 +104,9 @@ const validRow=r=>r&&HASH.test(r.id)&&typeof r.model==='string'&&r.model.length<
   (r.at===null||Number.isSafeInteger(r.at)&&r.at>=0)&&keys.every(k=>r[k]===null||Number.isSafeInteger(r[k])&&r[k]>=0);
 export class UsageLedger{
   constructor(directory=join(platformPaths().data,'usage-v1'),{timeZone='Asia/Shanghai',source='desktop-local'}={}){this.directory=directory;this.timeZone=timeZone;this.source=source;}
-  _gate=Promise.resolve();_barrier=Promise.resolve();_writes=new Set();_files=new Map();usageWrites=new Map();revision=0;cache=null;
-  beginUsageWrite(scope){this.usageWrites.set(scope,(this.usageWrites.get(scope)||0)+1);}
-  endUsageWrite(scope){const n=(this.usageWrites.get(scope)||0)-1;if(n>0)this.usageWrites.set(scope,n);else this.usageWrites.delete(scope);}
+  _gate=Promise.resolve();_barrier=Promise.resolve();_writes=new Set();_files=new Map();usageWrites=new Map();revision=0;cache=null;migration=null;
+  beginUsageWrite(scope){const key=UNIFIED_SCOPE;this.usageWrites.set(key,(this.usageWrites.get(key)||0)+1);}
+  endUsageWrite(scope){const key=UNIFIED_SCOPE,n=(this.usageWrites.get(key)||0)-1;if(n>0)this.usageWrites.set(key,n);else this.usageWrites.delete(key);}
   // Public queue remains a snapshot barrier for all outstanding writes. Its
   // setter also preserves the legacy test/caller ability to suspend new work.
   get queue(){return this._barrier;}
@@ -110,22 +124,22 @@ export class UsageLedger{
   }
   async backfillState(scope,host,{preferred=[]}={}){
     if(!HASH.test(scope)||!['app','ide'].includes(host))throw Error('Invalid backfill scope');
-    await this.queue.catch(()=>{});
+    await this.ensureMigrated();
     try{
-      const content=await readBounded(join(this.directory,scope,'backfill-v1.json'),BACKFILL_BYTES);
+      const content=await readBounded(join(this.directory,UNIFIED_SCOPE,'backfill-v1.json'),BACKFILL_BYTES);
       const value=JSON.parse(content);
-      if(value.schema!==1||value.account!==scope||value.host!==host||!value.entries||typeof value.entries!=='object'||Array.isArray(value.entries))return checkpointState({},true,'invalid');
+      if(value.schema!==1||value.account!==UNIFIED_SCOPE||value.host!==host||!value.entries||typeof value.entries!=='object'||Array.isArray(value.entries))return checkpointState({},true,'invalid');
       return boundedCheckpoints(value.entries,preferred,true);
     }catch(e){if(e.code==='ENOENT')return checkpointState();if(e.code==='USAGE_READ_BUDGET')return checkpointState({},true,'oversized');if(e instanceof SyntaxError)return checkpointState({},true,'invalid');throw e;}
   }
   saveBackfillState(scope,host,entries,{preferred=[],isCurrent=()=>true}={}){
     if(!HASH.test(scope)||!['app','ide'].includes(host))throw Error('Invalid backfill scope');
-    const file=join(this.directory,scope,'backfill-v1.json');
+    const file=join(this.directory,UNIFIED_SCOPE,'backfill-v1.json');
     return this.enqueue(file,async()=>{
       if(isCurrent()!==true)return;
-      const bounded=boundedCheckpoints(entries,preferred),content=JSON.stringify({schema:1,account:scope,host,entries:bounded});
+      const bounded=boundedCheckpoints(entries,preferred),content=JSON.stringify({schema:1,account:UNIFIED_SCOPE,host,entries:bounded});
       if(Buffer.byteLength(content)>BACKFILL_BYTES)throw Error('Checkpoint exceeds write budget');
-      await mkdir(join(this.directory,scope),{recursive:true});if(isCurrent()!==true)return;const temp=file+'.'+randomUUID()+'.tmp';
+      await mkdir(join(this.directory,UNIFIED_SCOPE),{recursive:true});if(isCurrent()!==true)return;const temp=file+'.'+randomUUID()+'.tmp';
       try{
         await this.writeRecord(temp,content);if(isCurrent()!==true)return;
         let previous;try{previous=await stat(file);}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -133,7 +147,7 @@ export class UsageLedger{
         if(previous?.size>BACKFILL_BYTES){
           // Keep oversized legacy metadata recoverable without reading/copying
           // it into memory. New checkpoints are bounded, so this happens once.
-          await rename(file,join(this.directory,scope,`backfill-v1.oversized-${randomUUID()}.json`));
+          await rename(file,join(this.directory,UNIFIED_SCOPE,`backfill-v1.oversized-${randomUUID()}.json`));
           if(isCurrent()!==true)return;
         }
         await rename(temp,file);return bounded;
@@ -142,7 +156,51 @@ export class UsageLedger{
   }
   async writeRecord(file,content){await writeFile(file,content,{mode:0o600});}
   async readSummaryRecord(file){return readBounded(file,16*1024*1024);}
-  file(scope,id){if(!HASH.test(scope)||!GUID.test(id))throw Error('Invalid usage scope');return join(this.directory,scope,hash(id.toLowerCase())+'.json');}
+  ensureMigrated(){
+    if(!this.migration)this.migration=this.migrateLegacyAccounts().catch(error=>{this.migration=null;throw error;});
+    return this.migration;
+  }
+  async migrateLegacyAccounts(){
+    let entries=[];
+    try{entries=await readdir(this.directory,{withFileTypes:true});}
+    catch(e){if(e.code==='ENOENT')return;throw e;}
+    const legacy=entries.filter(e=>e.isDirectory()&&HASH.test(e.name)&&e.name!==UNIFIED_SCOPE).map(e=>e.name);
+    if(!legacy.length)return;
+    const target=join(this.directory,UNIFIED_SCOPE);
+    await mkdir(target,{recursive:true});
+    for(const dir of legacy){
+      let files=[];try{files=await readdir(join(this.directory,dir));}catch(e){if(e.code!=='ENOENT')throw e;}
+      for(const name of files.filter(n=>/^[a-f0-9]{64}\.json$/.test(n))){
+        const source=join(this.directory,dir,name),destination=join(target,name);
+        let incoming;try{incoming=JSON.parse(await readBounded(source,16*1024*1024));}catch{continue;}
+        if(incoming?.schema!==1||!Array.isArray(incoming.records))continue;
+        let existing=null;try{existing=JSON.parse(await readBounded(destination,16*1024*1024));}catch{}
+        const merged=new Map();
+        for(const row of [...(existing?.records||[]),...incoming.records])if(validRow(row)){const previous=merged.get(row.id);if(!previous||sum(row)>sum(previous))merged.set(row.id,row);}
+        const records=[...merged.values()].sort((a,b)=>a.id.localeCompare(b.id));
+        const temp=destination+'.'+randomUUID()+'.tmp';
+        try{
+          await this.writeRecord(temp,JSON.stringify({schema:1,account:UNIFIED_SCOPE,records}));
+          await rename(temp,destination);
+        }finally{await unlink(temp).catch(()=>{});}
+      }
+      // A legacy host checkpoint only matters while the unified ledger has none.
+      try{
+        const value=JSON.parse(await readBounded(join(this.directory,dir,'backfill-v1.json'),BACKFILL_BYTES));
+        if(value?.schema===1&&['app','ide'].includes(value.host)){
+          try{await stat(join(target,'backfill-v1.json'));}
+          catch(e){if(e.code==='ENOENT')await writeFile(join(target,'backfill-v1.json'),JSON.stringify({...value,account:UNIFIED_SCOPE}),{mode:0o600});}
+        }
+      }catch{}
+      // Archive instead of deleting: a linked SQLite ledger or any unexpected
+      // file stays recoverable even though it is not merged by this pass.
+      const archive=join(this.directory,'.merged-'+randomUUID());
+      await mkdir(archive,{recursive:true});
+      await rename(join(this.directory,dir),join(archive,dir)).catch(()=>{});
+      this.revision++;
+    }
+  }
+  file(scope,id){if(!HASH.test(scope)||!GUID.test(id))throw Error('Invalid usage scope');return join(this.directory,UNIFIED_SCOPE,hash(id.toLowerCase())+'.json');}
   ingest(scope,id,raw,options={}){
     // Enter the per-conversation queue before the first asynchronous stat.
     // Otherwise a later disk import could overtake this older observation.
@@ -155,7 +213,7 @@ export class UsageLedger{
   ingestRows(scope,id,rows,{isCurrent=()=>true}={}){
     if(!scope)return Promise.resolve();
     const file=this.file(scope,id);this.beginUsageWrite(scope);
-    return this.enqueue(file,async()=>{
+    return this.ensureMigrated().then(()=>this.enqueue(file,async()=>{
       if(isCurrent()!==true)return;
       if(await this.diskExists(scope,id)){
         this.diskWrites=(this.diskWrites||0)+1;
@@ -163,18 +221,18 @@ export class UsageLedger{
       }
       let previous;try{previous=JSON.parse(await readBounded(file,16*1024*1024));}catch(e){if(isCurrent()!==true)return;if(e.code!=='ENOENT')throw Error('Usage ledger cannot be read');}
       if(isCurrent()!==true)return;
-      if(previous&&(previous.schema!==1||previous.account!==scope||!Array.isArray(previous.records)||!previous.records.every(validRow)))throw Error('Invalid usage ledger');
+      if(previous&&(previous.schema!==1||previous.account!==UNIFIED_SCOPE||!Array.isArray(previous.records)||!previous.records.every(validRow)))throw Error('Invalid usage ledger');
       const merged=new Map((previous?.records||[]).map(r=>[r.id,r]));
       for(const row of rows)merged.set(row.id,mergeUsageRow(row,merged.get(row.id)));
       const records=[...merged.values()].sort((a,b)=>a.id.localeCompare(b.id));
       if(previous&&JSON.stringify(previous.records)===JSON.stringify(records))return;
-      await mkdir(join(this.directory,scope),{recursive:true});if(isCurrent()!==true)return;const temp=file+'.'+randomUUID()+'.tmp';
-      try{await this.writeRecord(temp,JSON.stringify({schema:1,account:scope,records}));if(isCurrent()!==true)return;await rename(temp,file);}
+      await mkdir(join(this.directory,UNIFIED_SCOPE),{recursive:true});if(isCurrent()!==true)return;const temp=file+'.'+randomUUID()+'.tmp';
+      try{await this.writeRecord(temp,JSON.stringify({schema:1,account:UNIFIED_SCOPE,records}));if(isCurrent()!==true)return;await rename(temp,file);}
       finally{await unlink(temp).catch(()=>{});}
       // Keep the last same-account/day result as a visibly stale fallback
       // while a potentially expensive disk-backed summary is rebuilt.
       this.revision++;
-    }).catch(error=>{if(isCurrent()===true)throw error;}).finally(()=>this.endUsageWrite(scope));
+    }).catch(error=>{if(isCurrent()===true)throw error;}).finally(()=>this.endUsageWrite(scope)));
   }
   async diskExists(scope,id){try{return (await stat(this.file(scope,id).replace(/\.json$/,'.sqlite'))).isFile();}catch(e){if(e.code==='ENOENT')return false;throw e;}}
   diskJob(input,options={}){this.diskPending=(this.diskPending||0)+1;const pending=(this.diskQueue||Promise.resolve()).catch(()=>{}).then(()=>this.runDiskJob(input,options));this.diskQueue=pending;return pending.finally(()=>{this.diskPending--;});}
@@ -194,7 +252,7 @@ export class UsageLedger{
   async mergeDisk(scope,id,input,{isCurrent=()=>true}={}){
     const file=this.file(scope,id).replace(/\.json$/,'.sqlite');
       if(isCurrent()!==true)return;
-      await mkdir(join(this.directory,scope),{recursive:true});
+      await mkdir(join(this.directory,UNIFIED_SCOPE),{recursive:true});
       let previous=null;for(const candidate of [file,this.file(scope,id)]){try{await stat(candidate);previous=candidate;break;}catch(e){if(e.code!=='ENOENT')throw e;}}
       // Repeated settled-conversation polls often produce the same bounded row
       // set. Remember a verified signature for each recently touched SQLite
@@ -211,7 +269,7 @@ export class UsageLedger{
       }
       const staging=file+'.'+randomUUID()+'.tmp';
       try{
-        const result=await this.diskJob({action:'merge',scope,previous,staging,...input},{isCurrent});if(!result||isCurrent()!==true)return;
+        const result=await this.diskJob({action:'merge',scope:UNIFIED_SCOPE,previous,staging,...input},{isCurrent});if(!result||isCurrent()!==true)return;
         if(result.changed!==false){await rename(staging,file);this.revision++;}
         this.diskSignatures??=new Map();this.diskSignatures.delete(file);
         if(signature){const info=await lstat(file);if(!info.isSymbolicLink()&&info.isFile())this.diskSignatures.set(file,{signature,size:info.size,mtimeMs:info.mtimeMs,ctimeMs:info.ctimeMs,ino:info.ino});}
@@ -224,12 +282,12 @@ export class UsageLedger{
     // The logical JSON path is shared with ingestMemory for the same account
     // and conversation, so migration and ordinary writes cannot race. The
     // diskQueue independently limits expensive workers to one at a time.
-    return this.enqueue(file,()=>this.mergeDisk(scope,id,input,options)).finally(()=>{this.diskWrites--;this.endUsageWrite(scope);});
+    return this.ensureMigrated().then(()=>this.enqueue(file,()=>this.mergeDisk(scope,id,input,options))).finally(()=>{this.diskWrites--;this.endUsageWrite(scope);});
   }
   startDiskSummary(scope,now,scanRevision,cacheKey,isCurrent){
     if(this.diskSummaryPending||this.diskSummaryRetry?.key===cacheKey&&this.diskSummaryRetry.at>Date.now())return;
-    const staging=join(this.directory,scope,'.summary-'+randomUUID()+'.tmp');
-    this.diskSummaryPending=this.diskJob({action:'summary',scope,directory:join(this.directory,scope),staging,now,timeZone:this.timeZone,source:this.source},{isCurrent}).then(value=>{
+    const staging=join(this.directory,UNIFIED_SCOPE,'.summary-'+randomUUID()+'.tmp');
+    this.diskSummaryPending=this.diskJob({action:'summary',scope:UNIFIED_SCOPE,directory:join(this.directory,UNIFIED_SCOPE),staging,now,timeZone:this.timeZone,source:this.source},{isCurrent}).then(value=>{
       if(!value||isCurrent()!==true)return;this.diskSummaryError=false;
       if(this.revision===scanRevision){this.cache={key:cacheKey,revision:scanRevision,value};this.diskSummaryRetry=null;}
       else {
@@ -244,30 +302,37 @@ export class UsageLedger{
   }
   async summary(scope,now=Date.now(),{isCurrent=()=>true}={}){
     if(!scope||!HASH.test(scope))return null;
-    const today=dateKey(now,this.timeZone),cacheKey=scope+':'+today;
-    const unknown=()=>({accountKey:scope,timeZone:this.timeZone,today,days:[],models:[],todayTokens:null,weekTokens:null,monthTokens:null,totalTokens:null,requests:null,unreadableFiles:0,source:this.source,summaryStale:true});
-    if(this.usageWrites.get(scope))return this.cache?.key===cacheKey?{...this.cache.value,summaryStale:true}:unknown();
-    if(this.cache?.key===cacheKey&&this.cache.revision===this.revision)return this.cache.value;
+    await this.ensureMigrated();
+    const today=dateKey(now,this.timeZone),cacheKey=UNIFIED_SCOPE+':'+today,hoursFrom=hourFrom(now,this.timeZone);
+    const unknown=()=>({accountKey:scope,timeZone:this.timeZone,today,days:[],models:[],todayTokens:null,weekTokens:null,monthTokens:null,totalTokens:null,requests:null,unreadableFiles:0,source:this.source,hoursFrom,summaryStale:true});
+    if(this.usageWrites.get(UNIFIED_SCOPE))return this.cache?.key===cacheKey?{...this.cache.value,accountKey:scope,summaryStale:true}:unknown();
+    if(this.cache?.key===cacheKey&&this.cache.revision===this.revision)return {...this.cache.value,accountKey:scope};
     const scanRevision=this.revision;
     const daily=new Map(),models=new Set(),seen=new Map();let unreadable=0,unknownTokens=0,unknownRequests=0,partialRequests=0;
-    let files=[];try{files=await readdir(join(this.directory,scope));}catch(e){if(e.code!=='ENOENT')throw e;}
+    let files=[];try{files=await readdir(join(this.directory,UNIFIED_SCOPE));}catch(e){if(e.code!=='ENOENT')throw e;}
     if(files.some(name=>/^[a-f0-9]{64}\.sqlite$/.test(name))){
       this.startDiskSummary(scope,now,scanRevision,cacheKey,isCurrent);
-      return this.cache?.key===cacheKey?{...this.cache.value,summaryStale:true}:unknown();
+      return this.cache?.key===cacheKey?{...this.cache.value,accountKey:scope,summaryStale:true}:unknown();
     }
     for(const name of files.filter(name=>/^[a-f0-9]{64}\.json$/.test(name))){
       try{
-        const text=await this.readSummaryRecord(join(this.directory,scope,name));
-        const record=JSON.parse(text);if(record.schema!==1||record.account!==scope||!Array.isArray(record.records)||!record.records.every(validRow))throw Error('Invalid ledger');
+        const text=await this.readSummaryRecord(join(this.directory,UNIFIED_SCOPE,name));
+        const record=JSON.parse(text);if(record.schema!==1||record.account!==UNIFIED_SCOPE||!Array.isArray(record.records)||!record.records.every(validRow))throw Error('Invalid ledger');
         for(const r of record.records){const previous=seen.get(r.id);if(!previous||sum(r)>sum(previous))seen.set(r.id,r);}
       }catch{unreadable++;}
     }
     for(const r of seen.values()){
-      models.add(r.model);if(r.partial)partialRequests++;
+      const model=cleanModel(r.model);
+      models.add(model);if(r.partial)partialRequests++;
       if(r.at===null){unknownTokens+=sum(r);unknownRequests++;continue;}
       const date=dateKey(r.at,this.timeZone);if(!daily.has(date))daily.set(date,{date,models:{}});
-      const day=daily.get(date);day.models[r.model]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0};
-      const bucket=day.models[r.model];for(const key of keys)bucket[key]+=r[key]??0;bucket.total+=sum(r);bucket.requests++;
+      const day=daily.get(date);day.models[model]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0};
+      const bucket=day.models[model];for(const key of keys)bucket[key]+=r[key]??0;bucket.total+=sum(r);bucket.requests++;
+      if(date<hoursFrom)continue;
+      day.hours||={};
+      const h=hourKey(r.at,this.timeZone);day.hours[h]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0,models:{}};
+      const hour=day.hours[h];for(const key of keys)hour[key]+=r[key]??0;hour.total+=sum(r);hour.requests++;
+      hour.models[model]||={total:0};hour.models[model].total+=sum(r);
     }
     const days=[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date));
     const total=day=>Object.values(day.models).reduce((n,r)=>n+r.total,0);
@@ -275,8 +340,8 @@ export class UsageLedger{
       weekTokens:days.filter(d=>d.date>=weekStart(today)&&d.date<=today).reduce((n,d)=>n+total(d),0),
       monthTokens:days.filter(d=>d.date.slice(0,7)===today.slice(0,7)&&d.date<=today).reduce((n,d)=>n+total(d),0),
       totalTokens:days.reduce((n,d)=>n+total(d),0)+unknownTokens,unknownTokens,unknownRequests,partialRequests,unreadableFiles:unreadable,
-      requests:seen.size,firstDate:days[0]?.date||null,updatedAt:new Date(now).toISOString(),source:this.source};
-    if(this.revision===scanRevision&&!this.usageWrites.get(scope)){this.cache={key:cacheKey,revision:scanRevision,value};return value;}
+      requests:seen.size,firstDate:days[0]?.date||null,updatedAt:new Date(now).toISOString(),source:this.source,hoursFrom};
+    if(this.revision===scanRevision&&!this.usageWrites.get(UNIFIED_SCOPE)){this.cache={key:cacheKey,revision:scanRevision,value};return value;}
     return {...value,summaryStale:true};
   }
 }
@@ -285,8 +350,12 @@ export function weekStart(date){const d=new Date(date+'T00:00:00Z');d.setUTCDate
 export class DesktopUsage{
   constructor(store,ledger=new UsageLedger(),{host=null,discoverLocal=null,owns=()=>true,now=Date.now,sliceMs=3000,continueDelay=250,
     maxCandidates=25,maxCandidatesPerSlice=25,maxPassMs=15000,maxMapEntries=4096,localScanMs=30000,
-    liveMaxConversations=16,liveMaxRows=8192,liveMaxBytes=4*1024*1024,liveMaxGroups=128,liveMaxRecoveryGuards=16,liveMaxRecoveries=256,liveRetryMs=1000,livePollMs=1000,liveRecoveryPollMs=1000,liveBackgroundPollMs=1000,liveBackgroundRetryMs=60000}={}){
+    liveMaxConversations=16,liveMaxRows=8192,liveMaxBytes=4*1024*1024,liveMaxGroups=128,liveMaxRecoveryGuards=16,liveMaxRecoveries=256,liveRetryMs=1000,livePollMs=1000,liveRecoveryPollMs=1000,liveBackgroundPollMs=1000,liveBackgroundRetryMs=60000,pricing=null}={}){
     this.store=store;this.ledger=ledger;this.fingerprints=new Map();this.host=host;this.owns=()=>owns()===true;this.now=now;
+    // Pricing is opt-in: hosts ask for it explicitly so tests and offline runs
+    // never reach the network. `false` disables it even when requested.
+    this.pricing=pricing===false?null:pricing===true?new PricingService(ledger.directory):pricing;
+    if(this.pricing?.init)void this.pricing.init();
     this.discoverLocal=discoverLocal||(()=>host?discoverLocalConversations({host}):Promise.resolve({conversations:[],errors:0}));
     this.customDiscover=Boolean(discoverLocal);this.localScanMs=localScanMs;this.localScanAt=-Infinity;this.localScanResult=null;
     this.sliceMs=sliceMs;this.continueDelay=continueDelay;this.maxCandidates=maxCandidates;this.maxCandidatesPerSlice=maxCandidatesPerSlice;
@@ -504,7 +573,8 @@ export class DesktopUsage{
     const state=this.liveStates.get(scope+':'+String(id).toLowerCase());
     if(state?.needsDisk&&state.backgroundRequested&&state.epoch===epoch&&this.liveRecoveryCurrent(state)){state.backgroundCommitted=true;this.scheduleLive(state,0);}
   }
-  sync(forceFull=false){
+  sync(forceFull=false,models=[]){
+    if(forceFull)void this.pricing?.fetchCloud?.(models,true);
     if(this.disposed||!this.owns())return Promise.resolve();
     if(forceFull)this.forceQueued=true;
     if(this.pending)return this.pending;
@@ -657,8 +727,9 @@ export class DesktopUsage{
     if(sync&&this.now()-this.lastSync>60000&&!this.continuation)void this.sync();
     const scope=this.store.identity,epoch=this.store.epoch,current=()=>!this.disposed&&this.owns()&&scope===this.store.identity&&epoch===this.store.epoch;
     const value=await this.ledger.summary(scope,Date.now(),{isCurrent:current});if(!current())return null;
+    if(value?.models?.length)void this.pricing?.fetchCloud?.(value.models,false);
     const syncing=this.syncing||!!this.continuation||!!this.ledger.diskSummaryPending||!!this.ledger.diskWrites||value?.summaryStale===true;
-    return {...value,syncing,status:syncing?'syncing':this.status,missingConversations:this.missingConversations,confirmedMissingConversations:this.confirmedMissingConversations,retryingConversations:this.retryingConversations,persistenceError:this.store.usagePersistenceError===true||this.ledger.diskSummaryError===true};
+    return {...value,syncing,status:syncing?'syncing':this.status,missingConversations:this.missingConversations,confirmedMissingConversations:this.confirmedMissingConversations,retryingConversations:this.retryingConversations,persistenceError:this.store.usagePersistenceError===true||this.ledger.diskSummaryError===true,pricing:this.pricing?.snapshot?.(value?.models)??null};
   }
-  dispose(){this.disposed=true;this.forceQueued=false;clearTimeout(this.continuation);this.continuation=null;clearTimeout(this.liveRecoveryTimer);this.liveRecoveryTimer=null;this.refreshLiveScope();this.fullRemaining.clear();this.fullJournal=null;}
+  dispose(){this.disposed=true;this.forceQueued=false;clearTimeout(this.continuation);this.continuation=null;clearTimeout(this.liveRecoveryTimer);this.liveRecoveryTimer=null;this.refreshLiveScope();this.fullRemaining.clear();this.fullJournal=null;this.pricing?.dispose?.();}
 }

@@ -25,7 +25,7 @@ const ownership=process.env.ANTIGRAVITY_SIDECAR_WEB_PORT?new SidecarOwner(paths.
 let settingsCache={},settingsAt=-Infinity;
 const owns=()=>(!ownership||ownership.owns())&&settingsCache.enabled!==false;
 const store = new MetricsStore(undefined,{owns});
-const usage=new DesktopUsage(store,undefined,{host:'app',owns});
+const usage=new DesktopUsage(store,undefined,{host:'app',owns,pricing:true});
 store.onTrajectory=async(scope,id,raw,options={})=>{
   const {isCurrent=()=>true}=options;
   if(isCurrent()!==true)return;

@@ -9,3 +9,4 @@ dist/
 *.original
 settings.json
 patch.json
+.workbuddy/

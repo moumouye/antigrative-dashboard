@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-import {UsageLedger,DesktopUsage} from '../usage.mjs';
+import {UsageLedger,DesktopUsage,UNIFIED_SCOPE} from '../usage.mjs';
 import {TrajectoryReader} from '../trajectory-reader.mjs';
 import {discoverLocalConversations} from '../local-conversations.mjs';
 const account='a'.repeat(64),otherAccount='b'.repeat(64);
@@ -51,7 +51,7 @@ test('successful backfill survives restart, changed archives reimport, and refre
  const discoverLocal=async()=>({conversations:[{id,signature}],errors:0});const first=tracker(t,store,ledger,{discoverLocal});await first.sync();first.dispose();
  const second=tracker(t,store,new UsageLedger(ledger.directory),{discoverLocal});await second.sync();assert.equal(calls,1);
  signature='two';await second.sync();assert.equal(calls,2);await second.sync(true);assert.equal(calls,3);
- assert.equal((await ledger.summary(account)).requests,2);const saved=await readFile(join(ledger.directory,account,'backfill-v1.json'),'utf8');assert.equal(saved.includes(id),false);
+ assert.equal((await ledger.summary(account)).requests,2);const saved=await readFile(join(ledger.directory,UNIFIED_SCOPE,'backfill-v1.json'),'utf8');assert.equal(saved.includes(id),false);
 });
 
 test('failed history stays partial, respects backoff, retries automatically and allows manual override',async t=>{
@@ -152,7 +152,7 @@ test('delegated histories absent from disk and lists survive slices, cycles, res
  const restarted=tracker(t,store,new UsageLedger(ledger.directory),{sliceMs:0,continueDelay:5});await restarted.sync();await settle(restarted);
  assert.deepEqual(calls,[id,other,grandchild]);assert.equal((await restarted.ledger.summary(account)).totalTokens,80);
  await restarted.sync(true);await settle(restarted);assert.equal((await restarted.ledger.summary(account)).totalTokens,80);
- const checkpoint=await readFile(join(ledger.directory,account,'backfill-v1.json'),'utf8');assert.equal(checkpoint.includes(other),false,'Checkpoint keeps hashed identities only');
+ const checkpoint=await readFile(join(ledger.directory,UNIFIED_SCOPE,'backfill-v1.json'),'utf8');assert.equal(checkpoint.includes(other),false,'Checkpoint keeps hashed identities only');
 });
 
 test('old completed checkpoints recheck once to discover omitted delegated histories',async t=>{
