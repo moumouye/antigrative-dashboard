@@ -1,5 +1,5 @@
 // Local usage ledger. Never stores prompts, credentials or raw request IDs.
-import {readFile,writeFile,mkdir,rename,readdir,unlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,readdir,unlink,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {tokenCount,requestCacheMetrics} from './metrics.mjs';
@@ -8,19 +8,24 @@ import {discoverLocalConversations,conversationId} from './local-conversations.m
 import {setImmediate as yieldToLiveRequests} from 'node:timers/promises';
 const HASH=/^[a-f0-9]{64}$/,GUID=/^[a-f0-9-]{36}$/i;
 const hash=value=>createHash('sha256').update(value).digest('hex');
+export const UNIFIED_SCOPE=hash('antigravity:local:unified:usage');
 const keys=['uncached','cacheRead','cacheWrite','output'];
-const cleanModel=value=>String(value||'Unknown').replace(/[\x00-\x1f\x7f]/g,'').slice(0,120);
+export const cleanModel=value=>String(value||'Unknown').replace(/[\x00-\x1f\x7f]/g,'').replace(/-n$/,'').slice(0,120);
 const stamp=value=>typeof value==='string'&&/^20\d\d-\d\d-\d\dT/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
 const sum=r=>keys.reduce((n,k)=>n+(r[k]??0),0);
 export function dateKey(time,zone='Asia/Shanghai'){
   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(time);
   const get=key=>parts.find(p=>p.type===key).value;return `${get('year')}-${get('month')}-${get('day')}`;
 }
+export function hourKey(time,zone='Asia/Shanghai'){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}).formatToParts(time);
+  return parseInt(parts.find(p=>p.type==='hour').value,10);
+}
 export function usageRecords(raw,conversationId){
   const trajectory=raw?.trajectory||{},rows=new Map(),steps=trajectory.steps||[];
   for(const [index,g] of (trajectory.generatorMetadata||[]).entries()){
     const chat=g.chatModel,u=chat?.usage;if(!u)continue;
-    const output=tokenCount(u.outputTokens),cache=requestCacheMetrics(u);
+    const output=tokenCount(u.outputTokens)??(u.outputTokens===undefined?0:null),cache=requestCacheMetrics(u);
     const uncached=cache?.uncachedTokens??tokenCount(u.inputTokens);
     const read=tokenCount(u.cacheReadTokens)??(u.cacheReadTokens===undefined?0:null);
     const write=tokenCount(u.cacheWriteTokens)??(u.cacheWriteTokens===undefined?0:null);
@@ -43,9 +48,89 @@ const validRow=r=>r&&HASH.test(r.id)&&typeof r.model==='string'&&r.model.length<
   (r.at===null||Number.isSafeInteger(r.at)&&r.at>=0)&&keys.every(k=>r[k]===null||Number.isSafeInteger(r[k])&&r[k]>=0);
 export class UsageLedger{
   constructor(directory=join(platformPaths().data,'usage-v1'),{timeZone='Asia/Shanghai',source='desktop-local'}={}){this.directory=directory;this.timeZone=timeZone;this.source=source;}
-  queue=Promise.resolve();revision=0;cache=null;
-  async backfillState(scope,host){
-    if(!HASH.test(scope)||!['app','ide'].includes(host))throw Error('Invalid backfill scope');
+  queue=Promise.resolve();revision=0;cache=null;migrated=false;
+  async migrateLegacyAccounts(targetScope=UNIFIED_SCOPE){
+    await this.queue.catch(()=>{});
+    const pending=this.queue.catch(()=>{}).then(async()=>{
+      let entries=[];
+      try{entries=await readdir(this.directory,{withFileTypes:true});}
+      catch(e){if(e.code==='ENOENT')return;throw e;}
+      const legacyDirs=entries.filter(e=>e.isDirectory()&&HASH.test(e.name)&&e.name!==targetScope).map(e=>e.name);
+      if(!legacyDirs.length)return;
+      const targetDir=join(this.directory,targetScope);
+      await mkdir(targetDir,{recursive:true});
+      for(const host of ['app','ide']){
+        let targetJournal={};
+        try{
+          const text=await readFile(join(targetDir,'backfill-v1.json'),'utf8');
+          const parsed=JSON.parse(text);
+          if(parsed.schema===1&&parsed.host===host&&parsed.entries&&typeof parsed.entries==='object')targetJournal=parsed.entries;
+        }catch{}
+        let mergedJournal={...targetJournal},journalChanged=false;
+        for(const legacy of legacyDirs){
+          try{
+            const text=await readFile(join(this.directory,legacy,'backfill-v1.json'),'utf8');
+            const parsed=JSON.parse(text);
+            if(parsed.schema===1&&parsed.host===host&&parsed.entries&&typeof parsed.entries==='object'){
+              for(const [k,v] of Object.entries(parsed.entries)){
+                if(!mergedJournal[k]||(v.state==='complete'&&mergedJournal[k].state!=='complete')){
+                  mergedJournal[k]=v;journalChanged=true;
+                }
+              }
+            }
+          }catch{}
+        }
+        if(journalChanged){
+          const temp=join(targetDir,'backfill-v1.json.'+randomUUID()+'.tmp');
+          await writeFile(temp,JSON.stringify({schema:1,account:targetScope,host,entries:mergedJournal}),{mode:0o600});
+          await rename(temp,join(targetDir,'backfill-v1.json'));
+        }
+      }
+      for(const legacy of legacyDirs){
+        let files=[];
+        try{files=await readdir(join(this.directory,legacy));}catch{continue;}
+        for(const name of files.filter(f=>/^[a-f0-9]{64}\.json$/.test(f))){
+          const legacyFile=join(this.directory,legacy,name),targetFile=join(targetDir,name);
+          try{
+            const legacyText=await readFile(legacyFile,'utf8');
+            const legacyJson=JSON.parse(legacyText);
+            if(legacyJson.schema!==1||!Array.isArray(legacyJson.records))continue;
+            let targetRecords=[];
+            try{
+              const targetText=await readFile(targetFile,'utf8');
+              const targetJson=JSON.parse(targetText);
+              if(targetJson.schema===1&&Array.isArray(targetJson.records))targetRecords=targetJson.records;
+            }catch{}
+            const merged=new Map(targetRecords.map(r=>[r.id,r]));
+            for(const row of legacyJson.records){
+              if(!validRow(row))continue;
+              const old=merged.get(row.id);
+              if(!old)merged.set(row.id,{...row});
+              else{
+                const record={...row,at:row.at??old.at??null,timeBasis:row.at===null&&old.at!==null&&old.at!==undefined?old.timeBasis:row.timeBasis};
+                for(const key of keys)record[key]=row[key]??old[key]??null;
+                if(sum(record)>=sum(old))merged.set(row.id,record);
+              }
+            }
+            const records=[...merged.values()].sort((a,b)=>a.id.localeCompare(b.id));
+            const temp=targetFile+'.'+randomUUID()+'.tmp';
+            await writeFile(temp,JSON.stringify({schema:1,account:targetScope,records}),{mode:0o600});
+            await rename(temp,targetFile);
+          }catch{}
+        }
+        try{
+          const remaining=await readdir(join(this.directory,legacy));
+          for(const f of remaining)await unlink(join(this.directory,legacy,f)).catch(()=>{});
+          await rm(join(this.directory,legacy),{recursive:true,force:true}).catch(()=>{});
+        }catch{}
+      }
+      this.revision++;this.cache=null;
+    });
+    this.queue=pending;return pending;
+  }
+  async backfillState(scope=UNIFIED_SCOPE,host){
+    if(scope&&!HASH.test(scope)||!['app','ide'].includes(host))throw Error('Invalid backfill scope');
+    scope=UNIFIED_SCOPE;
     await this.queue.catch(()=>{});
     try{
       const content=await readFile(join(this.directory,scope,'backfill-v1.json'),'utf8');
@@ -55,8 +140,9 @@ export class UsageLedger{
       return Object.fromEntries(Object.entries(value.entries).filter(([id,e])=>HASH.test(id)&&e&&HASH.test(e.signature)&&['complete','retry'].includes(e.state)&&Number.isSafeInteger(e.failures)&&e.failures>=0&&Number.isSafeInteger(e.retryAt)&&e.retryAt>=0));
     }catch(e){if(e.code==='ENOENT'||e instanceof SyntaxError)return {};throw e;}
   }
-  saveBackfillState(scope,host,entries){
-    if(!HASH.test(scope)||!['app','ide'].includes(host))throw Error('Invalid backfill scope');
+  saveBackfillState(scope=UNIFIED_SCOPE,host,entries){
+    if(scope&&!HASH.test(scope)||!['app','ide'].includes(host))throw Error('Invalid backfill scope');
+    scope=UNIFIED_SCOPE;
     const file=join(this.directory,scope,'backfill-v1.json');
     const pending=this.queue.catch(()=>{}).then(async()=>{
       await mkdir(join(this.directory,scope),{recursive:true});const temp=file+'.'+randomUUID()+'.tmp';
@@ -64,9 +150,13 @@ export class UsageLedger{
       catch(e){await unlink(temp).catch(()=>{});throw e;}
     });this.queue=pending;return pending;
   }
-  file(scope,id){if(!HASH.test(scope)||!GUID.test(id))throw Error('Invalid usage scope');return join(this.directory,scope,hash(id.toLowerCase())+'.json');}
-  ingest(scope,id,raw){
-    if(!scope)return Promise.resolve();
+  file(scope=UNIFIED_SCOPE,id){
+    if(scope&&!HASH.test(scope)||!GUID.test(id))throw Error('Invalid usage scope');
+    scope=UNIFIED_SCOPE;
+    return join(this.directory,scope,hash(id.toLowerCase())+'.json');
+  }
+  ingest(scope=UNIFIED_SCOPE,id,raw){
+    scope=UNIFIED_SCOPE;
     const rows=usageRecords(raw,id),file=this.file(scope,id);
     const pending=this.queue.catch(()=>{}).then(async()=>{
       let previous;try{previous=JSON.parse(await readFile(file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw Error('Usage ledger cannot be read');}
@@ -81,9 +171,11 @@ export class UsageLedger{
       this.revision++;this.cache=null;
     });this.queue=pending;return pending;
   }
-  async summary(scope,now=Date.now()){
+  async summary(scope=UNIFIED_SCOPE,now=Date.now()){
+    if(scope&&!HASH.test(scope))return null;
+    scope=UNIFIED_SCOPE;
     await this.queue.catch(()=>{});
-    if(!scope||!HASH.test(scope))return null;
+    if(!this.migrated){this.migrated=true;await this.migrateLegacyAccounts(scope);}
     const today=dateKey(now,this.timeZone),cacheKey=scope+':'+today;
     if(this.cache?.key===cacheKey&&this.cache.revision===this.revision)return this.cache.value;
     const daily=new Map(),models=new Set(),seen=new Map();let unreadable=0,unknownTokens=0,unknownRequests=0,partialRequests=0;
@@ -92,15 +184,23 @@ export class UsageLedger{
       try{
         const text=await readFile(join(this.directory,scope,name),'utf8');if(text.length>16*1024*1024)throw Error('Ledger too large');
         const record=JSON.parse(text);if(record.schema!==1||record.account!==scope||!Array.isArray(record.records)||!record.records.every(validRow))throw Error('Invalid ledger');
-        for(const r of record.records){const previous=seen.get(r.id);if(!previous||sum(r)>sum(previous))seen.set(r.id,r);}
+        for(const r of record.records){
+          if(r.output===null&&r.uncached!==null&&r.cacheRead!==null&&r.cacheWrite!==null){r.output=0;r.partial=false;}
+          const previous=seen.get(r.id);if(!previous||sum(r)>sum(previous))seen.set(r.id,r);
+        }
       }catch{unreadable++;}
     }
     for(const r of seen.values()){
-      models.add(r.model);if(r.partial)partialRequests++;
+      const m=cleanModel(r.model);
+      models.add(m);if(r.partial)partialRequests++;
       if(r.at===null){unknownTokens+=sum(r);unknownRequests++;continue;}
-      const date=dateKey(r.at,this.timeZone);if(!daily.has(date))daily.set(date,{date,models:{}});
-      const day=daily.get(date);day.models[r.model]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0};
-      const bucket=day.models[r.model];for(const key of keys)bucket[key]+=r[key]??0;bucket.total+=sum(r);bucket.requests++;
+      const date=dateKey(r.at,this.timeZone);if(!daily.has(date))daily.set(date,{date,models:{},hours:{}});
+      const day=daily.get(date);day.models[m]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0};
+      const bucket=day.models[m];for(const key of keys)bucket[key]+=r[key]??0;bucket.total+=sum(r);bucket.requests++;
+      const h=hourKey(r.at,this.timeZone);day.hours[h]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0,models:{}};
+      const hBucket=day.hours[h];for(const key of keys)hBucket[key]+=r[key]??0;hBucket.total+=sum(r);hBucket.requests++;
+      hBucket.models[m]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0};
+      const hmBucket=hBucket.models[m];for(const key of keys)hmBucket[key]+=r[key]??0;hmBucket.total+=sum(r);hmBucket.requests++;
     }
     const days=[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date));
     const total=day=>Object.values(day.models).reduce((n,r)=>n+r.total,0);
@@ -117,15 +217,17 @@ export function weekStart(date){const d=new Date(date+'T00:00:00Z');d.setUTCDate
 import { PricingService } from './pricing.mjs';
 
 export class DesktopUsage{
-  constructor(store,ledger=new UsageLedger(),{host=null,discoverLocal=null,owns=()=>true,now=Date.now,sliceMs=3000,continueDelay=250,pricing=null}={}){
+  constructor(store,ledger=new UsageLedger(),{host=null,discoverLocal=null,owns=()=>true,now=Date.now,sliceMs=3000,continueDelay=250,pricing=null,unifiedScope=UNIFIED_SCOPE}={}){
     this.store=store;this.ledger=ledger;this.fingerprints=new Map();this.host=host;this.owns=owns;this.now=now;
+    this.unifiedScope=unifiedScope||UNIFIED_SCOPE;
+    this.scope=this.unifiedScope;
     this.pricing=pricing||new PricingService(ledger.directory);
     void this.pricing.init();
     this.discoverLocal=discoverLocal||(()=>host?discoverLocalConversations({host}):Promise.resolve({conversations:[],errors:0}));
     this.sliceMs=sliceMs;this.continueDelay=continueDelay;this.fullRemaining=new Set();this.passSeen=new Set();this.passFailures=new Set();
   }
-  syncing=false;lastSync=0;status='waiting';missingConversations=0;scope=null;scopeEpoch=null;forceQueued=false;disposed=false;continuation=null;
-  async ingest(scope,id,raw){await this.ledger.ingest(scope,id,raw);}
+  syncing=false;lastSync=0;status='waiting';missingConversations=0;forceQueued=false;disposed=false;continuation=null;
+  async ingest(scope,id,raw){await this.ledger.ingest(this.scope,id,raw);}
   sync(forceFull=false,models=[]){
     if(forceFull)void this.pricing.fetchCloud(models,true);
     if(this.disposed||!this.owns())return Promise.resolve();
@@ -147,10 +249,13 @@ export class DesktopUsage{
     })().catch(()=>{this.status='offline';this.lastSync=this.now();}).finally(()=>{this.syncing=false;this.pending=null;});return this.pending;
   }
   async runSync(forceFull){
-    const scope=this.store.identity,epoch=this.store.epoch;
-    const current=()=>!this.disposed&&this.owns()&&scope===this.store.identity&&epoch===this.store.epoch;
-    if(!scope)return null;
-    if(this.scope!==scope||this.scopeEpoch!==epoch){this.scope=scope;this.scopeEpoch=epoch;this.fingerprints.clear();this.fullRemaining.clear();this.passSeen.clear();this.passFailures.clear();}
+    const scope=this.scope;
+    const current=()=>!this.disposed&&this.owns();
+    if(!current())return null;
+    if(!this.ledger.migrated&&scope===UNIFIED_SCOPE){
+      this.ledger.migrated=true;await this.ledger.migrateLegacyAccounts(scope);
+      if(!current())return {current};
+    }
     let missing=0,listed=[];
     try{listed=await this.store.listConversations(true);}catch{missing++;}
     if(!current())return {current};
@@ -206,12 +311,11 @@ export class DesktopUsage{
     return {current,missing:missing+this.passFailures.size,more};
   }
   async snapshot(){
-    if(!this.store.identity)return null;
-    if(this.scope!==this.store.identity||this.scopeEpoch!==this.store.epoch){this.lastSync=0;this.status='waiting';this.missingConversations=0;if(this.pending)this.forceQueued=true;}
+    const scope=this.scope;
     if(this.now()-this.lastSync>60000&&!this.continuation)void this.sync();
-    const scope=this.store.identity,value=await this.ledger.summary(scope);
+    const value=await this.ledger.summary(scope);
     if(value?.models?.length)void this.pricing.fetchCloud(value.models,false);
-    return scope===this.store.identity?{...value,syncing:this.syncing||!!this.continuation,status:this.status,missingConversations:this.missingConversations,persistenceError:this.store.usagePersistenceError===true,pricing:this.pricing.snapshot(value?.models)}:null;
+    return {...value,accountKey:scope,syncing:this.syncing||!!this.continuation,status:this.status,missingConversations:this.missingConversations,persistenceError:this.store.usagePersistenceError===true,pricing:this.pricing.snapshot(value?.models)};
   }
   dispose(){this.disposed=true;this.forceQueued=false;clearTimeout(this.continuation);this.continuation=null;this.pricing?.dispose?.();}
 }

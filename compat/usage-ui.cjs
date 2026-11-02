@@ -38,6 +38,15 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   css.textContent+=`
     .bar-column:hover{background:transparent}.bar-column:active{transform:none}.stack{width:62%;max-width:30px;margin-inline:auto;gap:0;border-radius:4px 4px 0 0;overflow:hidden}.bar-segment{display:block;flex:none;min-height:0;border-radius:0;pointer-events:auto;background:var(--model-color);transition:opacity 140ms ease}.plot[data-highlight] .bar-segment:not([data-highlight=true]){opacity:.24}.empty-bar{height:1px;opacity:.35}.grid-line{border-top-style:solid;opacity:.45}.grid-line:first-child{opacity:.85}.chart{gap:16px}.plot{gap:5px}.axis,.x-label{font-size:10px}.chart-summary{font-size:11px;color:var(--pulse-muted);margin-top:5px}.chart-summary strong{color:var(--pulse-foreground);font-weight:500}.chart-wrap{padding-top:6px}.table .dot{border-radius:50%}
     .tip-model{padding:3px 0}.tip-model.dimmed{opacity:.5}.tip-model.active{font-weight:600}.model-share{font-size:10px;color:var(--pulse-muted);margin-left:9px}.usage-waiting{display:grid;place-items:center;min-height:260px;color:var(--pulse-muted);font-size:12px}.usage-waiting[hidden]{display:none}
+    .legend-badge{font-size:10px;color:var(--pulse-muted);margin-left:6px;font-variant-numeric:tabular-nums;opacity:.85}
+    .legend button.dimmed-model{opacity:.35}
+    .legend button.dimmed-model .legend-badge{color:var(--pulse-subtle)}
+    .legend-dismiss{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;margin-left:5px;border-radius:50%;font-size:11px;line-height:1;color:var(--pulse-muted);opacity:0;transition:opacity 120ms ease,background 120ms ease}
+    .legend button:hover .legend-dismiss{opacity:.7}
+    .legend-dismiss:hover{opacity:1!important;background:var(--pulse-hover);color:var(--pulse-foreground)}
+    .legend-trace-btn,.legend-restore-btn{font-size:10px;padding:2px 8px;border-radius:5px;border:1px dashed var(--pulse-border);background:var(--pulse-hover);color:var(--pulse-muted);cursor:pointer;transition:all 140ms ease;align-self:center}
+    .legend-trace-btn:hover,.legend-restore-btn:hover{color:var(--pulse-foreground);border-color:var(--pulse-accent);background:var(--pulse-control)}
+    .legend button.trace-expanded{border-style:dashed}
   `;
   const page=document.createElement('div');page.className='page';
   setMarkup(page,`<header class="top"><div><div class="eyebrow">ANTIGRATIVE DASHBOARD</div><h1 id="title"></h1><div class="sub"><span class="live-dot"></span><span id="subtitle"></span></div></div><div class="actions"><button id="locale" type="button" aria-label="Language"><span id="locale-label" class="locale-label">中</span></button><button id="refresh" type="button" aria-label="Refresh"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 7a5 5 0 1 0-1.3 4.4M13 3v4H9"/></svg></button><button id="close" type="button" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div></header><nav class="tabs" role="tablist"><button id="overview-tab" role="tab" aria-controls="overview"></button><button id="details-tab" role="tab" aria-controls="details"></button></nav><div class="totals" id="totals"></div><section id="usage-waiting" class="usage-waiting" role="status" hidden></section><section id="overview" role="tabpanel"><div class="section-head"><div><h2 id="activity-title"></h2><div class="muted" id="hourly-summary"></div></div><div class="chart-controls"><div class="day-pills" id="day-pills"></div></div></div><div class="chart-wrap"><div class="chart"><div class="axis" id="hourly-axis"></div><div class="plot" id="hourly-plot"></div></div></div><div class="selected" id="selection-card"><div class="selected-main"><div class="selected-header"><div class="title" id="selection-title"></div><span class="muted" id="selection-value"></span></div><div class="composition-bar-wrap" id="selection-comp-wrap" hidden><div class="composition-bar" id="selection-comp-bar"></div><div class="comp-legend" id="selection-comp-legend"></div></div></div><button id="selection-details"></button></div></section><section id="details" role="tabpanel" hidden><div class="section-head"><h2 id="detail-title"></h2><div class="chart-controls"><div class="range"><button id="previous" aria-label="Previous">‹</button><strong id="range-label"></strong><button id="next" aria-label="Next">›</button></div><div class="seg" id="period-controls"><button data-period="day"></button><button data-period="week"></button><button data-period="month"></button></div></div></div><div class="filter-strip"><div class="comp-filters" id="comp-filters"></div><div class="legend" id="legend"></div></div><div class="chart-wrap"><div class="chart"><div class="axis" id="axis"></div><div class="plot" id="plot"></div></div></div><div class="drilldown-banner" id="drilldown-banner" hidden><span id="drilldown-banner-text"></span><button type="button" id="clear-drilldown"></button></div><div class="table-wrap"><table class="table"><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table></div></section><div class="alert" id="alert" hidden></div><footer class="footer"><span id="coverage"></span><span id="timezone"></span></footer><div class="tip" id="tip" role="status" hidden></div>`);view.append(page);
@@ -66,6 +75,9 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   const $=id=>view.getElementById(id),text=(id,value)=>{if($(id).textContent!==value)$(id).textContent=value;};
   const hourKey=(time,zone='Asia/Shanghai')=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}).formatToParts(time);return parseInt(parts.find(p=>p.type==='hour').value,10);};
   let value=null,tab='overview',heatMode='day',period='day',focusedBucket=null,year=null,selected=null,selectedDay=null,disabledModels=new Set(),disabledComponents=new Set(),sortKey='total',sortOrder='desc',lastKey='',busy=false,opener=null;
+  let showDormantTrace=false,userDismissedModels=new Set();
+  try{const saved=localStorage.getItem('ag_pulse_dismissed_models');if(saved)userDismissedModels=new Set(JSON.parse(saved));}catch{}
+  const saveDismissed=()=>{try{localStorage.setItem('ag_pulse_dismissed_models',JSON.stringify([...userDismissedModels]));}catch{}};
   const periodAnchors={day:null,week:null,month:null};
   const getAnchor=p=>{const a=periodAnchors[p]||value?.today||new Date().toISOString().slice(0,10);return value?.today&&a>value.today?value.today:a;};
   let disposed=false,refreshMotion=null,refreshDelay=null,finishRefresh=null,accountKey=null,tipTarget=null,tipModel=null;
@@ -77,7 +89,7 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     if(replayGuide&&signature!==guideSignature){guideDismissed=false;guideError=false;}
     guideSignature=signature;intro.hidden=guideDismissed;
     text('usage-intro-title',w('先了解你的用量统计','About your token usage'));
-    text('usage-intro-history',w('自动汇总当前账号可读取的本地历史对话，再持续记录新请求；已删除或缺失的历史可能无法补齐。','Available local conversations for this account are imported automatically, then new requests are recorded. Deleted or missing history may leave gaps.'));
+    text('usage-intro-history',w('自动汇总本机可读取的本地历史对话，各账号统一记录 Token 计费与计量；已删除或缺失的历史可能无法补齐。','Available local conversations on this device are imported automatically, unifying Token usage and billing across accounts. Deleted or missing history may leave gaps.'));
     text('usage-intro-scope',w('统计仅代表本机已记录的 Token 用量，不是账户账单；天、周、月均按 UTC+8 划分。','Totals cover usage recorded on this device, not account billing. Days, weeks and months use UTC+8.'));
     text('usage-intro-storage',w('只在本地保存时间、模型和用量，不保存对话正文。删除对话不会扣除已记录的用量。','Only times, models and usage counters are saved locally, never conversation text. Deleting a chat does not subtract usage already recorded.'));
     text('usage-intro-done',guideSaving?w('保存中…','Saving…'):w('知道了','Got it'));
@@ -144,7 +156,19 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   const add=(date,days)=>{const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);};
   const week=date=>{const d=new Date(date+'T00:00:00Z');return add(date,-((d.getUTCDay()+6)%7));};
   const month=(date,shift)=>{const d=new Date(date.slice(0,7)+'-01T00:00:00Z');d.setUTCMonth(d.getUTCMonth()+shift);return d.toISOString().slice(0,10);};
-  const modelName=model=>model.replace(/-n$/,'').replace(/^gemini-/i,'Gemini ').replace(/^claude-/i,'Claude ').replace(/^gpt-/i,'GPT ').replace(/-/g,' ');
+  const modelName=model=>{
+    if(!model)return 'Unknown';
+    let s=String(model).trim().replace(/-n$/,'');
+    if(/[A-Z]/.test(s)&&/\s/.test(s)&&!/-/.test(s))return s;
+    s=s.replace(/-(\d+)-(\d+)/g,'-$1.$2');
+    const isThinking=/-thinking$/i.test(s);
+    if(isThinking)s=s.replace(/-thinking$/i,'');
+    s=s.replace(/^gemini-/i,'Gemini ').replace(/^claude-/i,'Claude ').replace(/^gpt-/i,'GPT ').replace(/-/g,' ')
+      .replace(/\bflash\b/gi,'Flash').replace(/\bpro\b/gi,'Pro').replace(/\bultra\b/gi,'Ultra')
+      .replace(/\bopus\b/gi,'Opus').replace(/\bsonnet\b/gi,'Sonnet').replace(/\bhaiku\b/gi,'Haiku');
+    if(isThinking)s+=' (Thinking)';
+    return s.trim();
+  };
   const defaultPricing={'google/gemini-4-argon':{prompt:0.000002,completion:0.00001,cacheRead:0.0000001,cacheWrite:0.0000001875},'google/gemini-3.8-flash':{prompt:0.00000075,completion:0.00000375,cacheRead:0.000000075,cacheWrite:0.0000000416666666666667},'google/gemini-3.8-pro':{prompt:0.00000125,completion:0.000005,cacheRead:0.0000003125,cacheWrite:0.00000125},'anthropic/claude-opus-5.5':{prompt:0.000004,completion:0.00002,cacheRead:0.0000002,cacheWrite:0.000005},'anthropic/claude-opus-4.6':{prompt:0.000005,completion:0.000025,cacheRead:0.0000005,cacheWrite:0.00000625},'anthropic/claude-sonnet-5.5':{prompt:0.000002,completion:0.00001,cacheRead:0.0000001,cacheWrite:0.0000025},'anthropic/claude-haiku-5.5':{prompt:0.0000001,completion:0.0000005,cacheRead:0.00000001,cacheWrite:0.000000125},'openai/gpt-4o':{prompt:0.0000025,completion:0.00001,cacheRead:0.00000125,cacheWrite:0}};
   const normalizeKey=str=>typeof str==='string'?str.toLowerCase().trim().replace(/^https?:\/\/[^\/]+\//,'').replace(/^[~@]/,'').replace(/^(?:google|anthropic|openai)\//,'').replace(/-(?:n|thinking|preview|latest)$/, '').replace(/:batch$/, '').replace(/\s+/g,'-'):'';
   function findPricing(model){
@@ -185,7 +209,7 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   function rangeCost(models,respectFilters=true){
     let usd=0,has=false;
     for(const [model,r]of Object.entries(models||{})){
-      if(respectFilters&&tab==='details'&&disabledModels.has(model))continue;
+      if(respectFilters&&tab==='details'&&(disabledModels.has(model)||userDismissedModels.has(model)))continue;
       const c=costOf(model,r,respectFilters);
       if(c){usd+=c.usd;has=true;}
     }
@@ -209,7 +233,7 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   const hsl=a=>{const [r,g,b]=a.map(v=>v/255),hi=Math.max(r,g,b),lo=Math.min(r,g,b),d=hi-lo,l=(hi+lo)/2;return [d?((hi===r?(g-b)/d+(g<b?6:0):hi===g?(b-r)/d+2:(r-g)/d+4)*60):0,d?d/(1-Math.abs(2*l-1)):0,l];};
   const fromHsl=(h,s,l)=>{const a=s*Math.min(l,1-l),f=n=>{const k=(n+h/30)%12;return Math.round(255*(l-a*Math.max(-1,Math.min(k-3,9-k,1))));};return [f(0),f(8),f(4)];};
   function syncPalette(){
-    const models=[...(value?.models||[])].sort(),key=themeSignature()+'|'+models.join('|');if(key===paletteKey)return;paletteKey=key;modelColors.clear();
+    const models=[...new Set((value?.models||[]).map(m=>m.replace(/-n$/,'')))].sort(),key=themeSignature()+'|'+models.join('|');if(key===paletteKey)return;paletteKey=key;modelColors.clear();
     const style=getComputedStyle(root.host||dialog),base=rgb(style.getPropertyValue('--pulse-accent').trim()||'#85a8ff'),background=rgb(style.getPropertyValue('--pulse-background').trim()||'#1c1d1f'),[h,s]=hsl(base);
     const dark=luminance(background)<.35,offsets=[0,-18,18,-36,36,-9,9,-27,27],tones=dark?[.64,.52,.73,.59,.68]:[.43,.33,.51,.38,.47];
     const end=contrast([255,255,255],background)>contrast([0,0,0],background)?1:0;
@@ -219,9 +243,27 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     });
   }
   const color=model=>modelColors.get(model)||'var(--pulse-accent)';
+  function isModelRecent(model){
+    if(!value?.today)return false;
+    const cutoff=add(value.today,-2);
+    for(const day of value?.days||[]){
+      if(day.date>=cutoff&&day.date<=value.today){
+        const r=day.models?.[model]||day.models?.[model+'-n'];
+        if((r?.total||0)>0||(r?.requests||0)>0)return true;
+      }
+    }
+    return false;
+  }
+  function isModelDormantTrace(model,rangeTotals,totalTokens){
+    if(isModelRecent(model))return false;
+    const mTokens=rangeTotals.get(model)||0;
+    const share=totalTokens>0?mTokens/totalTokens:0;
+    return share<0.001;
+  }
   const totals=(from,to,filter=false)=>{
-    const models={};for(const day of value?.days||[])if(day.date>=from&&day.date<=to)for(const [model,r]of Object.entries(day.models)){
-      if(filter&&disabledModels.has(model))continue;
+    const models={};for(const day of value?.days||[])if(day.date>=from&&day.date<=to)for(const [rawModel,r]of Object.entries(day.models)){
+      const model=rawModel.replace(/-n$/,'');
+      if(filter&&(disabledModels.has(model)||userDismissedModels.has(model)))continue;
       models[model]||={total:0,requests:0,uncached:0,cacheRead:0,cacheWrite:0,output:0};for(const key of Object.keys(models[model]))models[model][key]+=r[key]||0;
     }
     return {from,to,models,total:Object.values(models).reduce((n,r)=>n+r.total,0),requests:Object.values(models).reduce((n,r)=>n+r.requests,0)};
@@ -502,17 +544,138 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     }
 
     // Row 2: Models
+    const rangeStart=buckets[0]?.from,rangeEnd=buckets.at(-1)?.to;
+    const rangeModels=new Set();
+    const rangeModelTotals=new Map();
+    for(const day of value.days||[]){
+      if(day.date>=rangeStart&&day.date<=rangeEnd){
+        for(const [m,r] of Object.entries(day.models||{})){
+          const model=m.replace(/-n$/,'');
+          if((r.total||0)>0||(r.requests||0)>0)rangeModels.add(model);
+          rangeModelTotals.set(model,(rangeModelTotals.get(model)||0)+(r.total||0));
+        }
+      }
+    }
+    const visibleModels=[...new Set((value.models||[]).map(m=>m.replace(/-n$/,'')))].filter(m=>rangeModels.has(m)).sort((a,b)=>(rangeModelTotals.get(b)||0)-(rangeModelTotals.get(a)||0));
+    const totalRangeTokens=[...rangeModelTotals.values()].reduce((sum,v)=>sum+v,0);
+
+    const focusedModelsObj=focusedBucket?(focusedBucket.models||totals(focusedBucket.from,focusedBucket.to,false).models):null;
+
+    let dormantTraceCount=0,dormantTraceTokens=0,dismissedCount=0;
     $('legend').replaceChildren();
-    for(const model of value.models){
+    for(const model of visibleModels){
+      const totalInRange=rangeModelTotals.get(model)||0;
+      let displayTokens=totalInRange;
+      let isZeroInFocus=false;
+      if(focusedModelsObj){
+        const fRec=focusedModelsObj[model];
+        const fTotal=fRec?(fRec.total||0):0;
+        displayTokens=fTotal;
+        if(fTotal===0)isZeroInFocus=true;
+      }
+
+      if(focusedBucket&&isZeroInFocus)continue;
+      if(userDismissedModels.has(model)){
+        dismissedCount++;
+        continue;
+      }
+
+      const isDormant=!focusedBucket&&isModelDormantTrace(model,rangeModelTotals,totalRangeTokens);
+      if(isDormant&&!showDormantTrace){
+        dormantTraceCount++;
+        dormantTraceTokens+=totalInRange;
+        continue;
+      }
+
       const button=node('button',''),dot=node('i','dot');dot.style.setProperty('--model-color',color(model));
-      button.append(dot,document.createTextNode(modelName(model)));button.type='button';button.setAttribute('aria-pressed',String(!disabledModels.has(model)));
-      button.addEventListener('click',()=>{
-        if(disabledModels.has(model))disabledModels.delete(model);else disabledModels.add(model);
+      if(isDormant)button.classList.add('trace-expanded');
+      button.append(dot,document.createTextNode(modelName(model)));
+      const badge=node('span','legend-badge',displayTokens>0?compact(displayTokens):(focusedBucket?'0':''));
+      button.append(badge);
+
+      const dismissBtn=node('span','legend-dismiss','×');
+      dismissBtn.title=w('隐藏此模型 (不再在此看板显示)','Hide this model from view');
+      dismissBtn.addEventListener('click',e=>{
+        e.stopPropagation();
+        userDismissedModels.add(model);
+        disabledModels.add(model);
+        saveDismissed();
+        renderTotals();
+        renderChart();
+      });
+      button.append(dismissBtn);
+
+      button.type='button';
+      button.setAttribute('aria-pressed',String(!disabledModels.has(model)));
+      if(isZeroInFocus)button.classList.add('dimmed-model');
+
+      button.title=isZeroInFocus?w('所选切片中无用量','No usage in selected slice'):(
+        (isDormant?w('[历史微量] ','[Trace] '):'')+w(`用量: ${full(displayTokens)} Token (Option/Alt + 点击独占，右键或×隐藏)`,`Usage: ${full(displayTokens)} tokens (Option/Alt + click to isolate, right-click or × to hide)`)
+      );
+
+      button.addEventListener('contextmenu',e=>{
+        e.preventDefault();
+        userDismissedModels.add(model);
+        disabledModels.add(model);
+        saveDismissed();
+        renderTotals();
+        renderChart();
+      });
+
+      button.addEventListener('click',event=>{
+        if(event.altKey||event.metaKey){
+          if(disabledModels.size===visibleModels.length-1&&!disabledModels.has(model)){
+            disabledModels.clear();
+            for(const m of userDismissedModels)disabledModels.add(m);
+          }else{
+            disabledModels.clear();
+            for(const other of visibleModels){
+              if(other!==model)disabledModels.add(other);
+            }
+          }
+        }else{
+          if(disabledModels.has(model))disabledModels.delete(model);else disabledModels.add(model);
+        }
         renderTotals();
         renderChart();
       });
       button.addEventListener('pointerenter',()=>highlightModel(disabledModels.has(model)?null:model));button.addEventListener('pointerleave',()=>highlightModel(null));
       $('legend').append(button);
+    }
+
+    if(!focusedBucket&&dormantTraceCount>0){
+      const traceBtn=node('button','legend-trace-btn',w(`+${dormantTraceCount} 历史微量 (${compact(dormantTraceTokens)})`,`+${dormantTraceCount} trace (${compact(dormantTraceTokens)})`));
+      traceBtn.type='button';
+      traceBtn.title=w(`包含 ${dormantTraceCount} 个近期（近3天）无调用且全月占比<0.1%的微量测试模型，点击展开`,`Click to expand ${dormantTraceCount} dormant trace model(s) (<0.1% share, inactive in last 3 days)`);
+      traceBtn.addEventListener('click',()=>{
+        showDormantTrace=true;
+        renderChart();
+      });
+      $('legend').append(traceBtn);
+    }else if(!focusedBucket&&showDormantTrace&&visibleModels.some(m=>!userDismissedModels.has(m)&&isModelDormantTrace(m,rangeModelTotals,totalRangeTokens))){
+      const collapseBtn=node('button','legend-trace-btn',w('收起历史微量','Collapse trace'));
+      collapseBtn.type='button';
+      collapseBtn.addEventListener('click',()=>{
+        showDormantTrace=false;
+        renderChart();
+      });
+      $('legend').append(collapseBtn);
+    }
+
+    if(dismissedCount>0){
+      const restoreBtn=node('button','legend-restore-btn',w(`已隐藏 ${dismissedCount} 个模型 (恢复)`,`${dismissedCount} hidden (restore)`));
+      restoreBtn.type='button';
+      restoreBtn.title=w('点击恢复所有被手动隐藏的模型','Click to restore all manually hidden models');
+      restoreBtn.addEventListener('click',()=>{
+        for(const m of visibleModels){
+          userDismissedModels.delete(m);
+          disabledModels.delete(m);
+        }
+        saveDismissed();
+        renderTotals();
+        renderChart();
+      });
+      $('legend').append(restoreBtn);
     }
 
     for(const b of buckets){
@@ -534,12 +697,13 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
       const isFocused=focusedBucket&&focusedBucket.from===bucket.from&&focusedBucket.to===bucket.to;
       if(isFocused)button.classList.add('focused-bar');
 
-      const segments=value.models.filter(m=>!disabledModels.has(m)&&modelActiveTokens(bucket.models[m]||{})>0);
+      const segments=visibleModels.filter(m=>!disabledModels.has(m)&&modelActiveTokens(bucket.models[m]||{})>0);
       for(const [j,model]of segments.entries()){
         const r=bucket.models[model];
         const activeTokens=modelActiveTokens(r);
         const bar=node('i','bar-segment');
-        const height=activeTokens/ceiling*227;
+        let height=activeTokens/ceiling*227;
+        if(activeTokens>0&&height<2)height=2;
         bar.dataset.model=model;bar.setAttribute('aria-hidden','true');
         bar.style.setProperty('--model-color',color(model));bar.style.height=height+'px';
         if(j&&height>=3)bar.style.boxShadow='inset 0 -1px 0 color-mix(in srgb,var(--pulse-background) 48%,transparent)';
@@ -625,8 +789,9 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     $('table-body').replaceChildren();
     const rowsData=[];
     for(const [model,r]of Object.entries(tableSource)){
-      if(disabledModels.has(model))continue;
+      if(disabledModels.has(model)||userDismissedModels.has(model))continue;
       const activeTokens=modelActiveTokens(r);
+      if(focusedBucket&&activeTokens===0)continue;
       const c=costOf(model,r,true);
       rowsData.push({model,r,activeTokens,costUSD:c?c.usd:0,costObj:c});
     }
@@ -826,7 +991,7 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     }
     $('usage-waiting').hidden=true;
     syncPalette();
-    text('title',w('用量统计','Token usage'));text('subtitle',w(`本机 ${hostLabel} · 当前账号`,`Local ${hostLabel} · current account`));
+    text('title',w('用量统计','Token usage'));text('subtitle',w(`本机 ${hostLabel} · 统一计量`,`Local ${hostLabel} · unified usage`));
     text('overview-tab',w('活动概览','Activity'));text('details-tab',w('用量详情','Usage details'));text('activity-title',w('单日时段活跃','Daily Hourly Activity'));text('detail-title',w('按模型统计','Usage by model'));
     text('locale-label',zh()?'EN':'中');for(const [id,label]of [['locale',w('切换到英文','Switch to Chinese')],['refresh',w('刷新用量','Refresh usage')],['close',w('关闭','Close')]]){$(id).setAttribute('aria-label',label);$(id).title=label;}text('selection-details',w('查看这段用量 →','View usage →'));
     for(const b of view.querySelectorAll('[data-period]'))b.textContent=({day:w('天','Day'),week:w('周','Week'),month:w('月','Month')})[b.dataset.period];
@@ -896,8 +1061,8 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   const contentKey=data=>JSON.stringify([{...data,updatedAt:undefined},language.language,themeSignature()]);
   const themeObserver=new MutationObserver(()=>{if(!disposed&&value&&dialog.open){const key=contentKey(value);if(key!==lastKey){lastKey=key;render();}}});
   if(root.host)themeObserver.observe(root.host,{attributes:true,attributeFilter:['data-pulse-theme','style']});
-  return {open(data,trigger){if(!data||disposed)return;tab='overview';accountKey=data.accountKey;value=data;opener=trigger;selectedDay=data.today;periodAnchors.day=data.today;periodAnchors.week=data.today;periodAnchors.month=data.today;focusedBucket=null;lastKey=contentKey(data);render();if(!dialog.open)dialog.showModal();},
-    update(data){if(disposed)return;if(!data){if(!value)return;value=null;lastKey='';if(dialog.open)render();return;}const prevToday=value?.today;if(accountKey&&accountKey!==data.accountKey){selected=null;selectedDay=data.today;disabledModels.clear();focusedBucket=null;periodAnchors.day=data.today;periodAnchors.week=data.today;periodAnchors.month=data.today;}else if(prevToday&&prevToday!==data.today){selectedDay=data.today;for(const p of ['day','week','month'])if(!periodAnchors[p]||periodAnchors[p]>=prevToday)periodAnchors[p]=data.today;}accountKey=data.accountKey;value=data;if(!dialog.open)return;const key=contentKey(data);if(key===lastKey)return;lastKey=key;render();},
+  return {open(data,trigger){if(!data||disposed)return;tab='overview';accountKey=data.accountKey;value=data;opener=trigger;selectedDay=data.today;periodAnchors.day=data.today;periodAnchors.week=data.today;periodAnchors.month=data.today;focusedBucket=null;for(const m of userDismissedModels)disabledModels.add(m);lastKey=contentKey(data);render();if(!dialog.open)dialog.showModal();},
+    update(data){if(disposed)return;if(!data){if(!value)return;value=null;lastKey='';if(dialog.open)render();return;}const prevToday=value?.today;if(accountKey&&accountKey!==data.accountKey){selected=null;selectedDay=data.today;disabledModels.clear();for(const m of userDismissedModels)disabledModels.add(m);focusedBucket=null;periodAnchors.day=data.today;periodAnchors.week=data.today;periodAnchors.month=data.today;}else if(prevToday&&prevToday!==data.today){selectedDay=data.today;for(const p of ['day','week','month'])if(!periodAnchors[p]||periodAnchors[p]>=prevToday)periodAnchors[p]=data.today;}accountKey=data.accountKey;value=data;if(!dialog.open)return;const key=contentKey(data);if(key===lastKey)return;lastKey=key;render();},
     restoreModal(){if(!disposed&&dialog.open&&dialog.isConnected&&!dialog.matches(':modal')){dialog.close();dialog.showModal();}},
     close,syncGuideDismissed(){if(!replayGuide)dismissGuide();},dispose(){disposed=true;themeObserver.disconnect();clearTimeout(refreshDelay);finishRefresh?.();refreshMotion?.cancel();dialog.close();dialog.remove();backdrop.remove();},get isOpen(){return dialog.open;}};
 };

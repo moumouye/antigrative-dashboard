@@ -8,7 +8,7 @@ On first opening, a compact introduction explains local history import, missing/
 
 Local acceptance builds can set `window.__agPulseUsageGuidePreview = true` before mounting the widget to replay the introduction after a language or theme change. This flag does not clear the ledger and is not set by the packaged collectors.
 
-The account-level usage window stays open through composer reflows and replacement. A temporarily missing usage snapshot masks totals until data returns; changing accounts resets filters and replaces the displayed data. Closing the window restores the strip to the current composer.
+The unified usage window stays open through composer reflows and replacement. A temporarily missing usage snapshot masks totals until data returns; switching accounts maintains cumulative local usage without clearing statistics. Closing the window restores the strip to the current composer.
 
 The window uses a top-layer popover with dialog semantics, a backdrop and explicit keyboard/focus containment. This avoids Chromium's native modal inertness changes across an entire long chat, which can otherwise block both opening and closing. Escape, nested year menus, Tab/Shift+Tab, background pointer/scroll blocking, focus restoration and composer replacement are covered by browser regression tests. `tools/check-usage-performance.mjs` exercises a synthetic 20,000-element host without reading real conversation data.
 
@@ -19,20 +19,20 @@ Model colors are generated from the current host accent and actual background. A
 ## Accounting
 
 - Total = uncached input + cache reads + cache writes + output. Output already includes thinking.
-- Repeated reads upsert request records. Matching request IDs across conversation records count once per account.
+- Repeated reads upsert request records. Matching request IDs across conversation records count once across all accounts on this device.
 - Token usage is independent of TPS timing-quality exclusions.
 - Request creation time determines the date. If unavailable, the matching planner step's creation time is used. Undated requests contribute only to the all-time total and are identified separately.
 - Date grouping uses Asia/Shanghai and Monday-start weeks.
 - Local trajectories are backfilled on startup, then checked every 60 seconds. The current conversation is also ingested during ordinary metrics polling. Manual refresh starts a backfill; the sync indicator remains until it finishes.
-- History discovery uses IDs from the selected host's local `conversations/*.db` and `brain/<conversation-id>` directories as well as the API list. App and IDE roots are separate. Files only identify candidates; Token counters still come from the authenticated local API, not from parsing chat text or SQLite content. These records represent what that local host can read, not proof of the original account that created every historical file.
+- History discovery uses IDs from the selected host's local `conversations/*.db` and `brain/<conversation-id>` directories as well as the API list. App and IDE roots are separate. Files only identify candidates; Token counters still come from the authenticated local API, not from parsing chat text or SQLite content. These records represent what that local host can read, unifiying usage across accounts.
 - Backfill uses the shared paginated reader, with its existing time and statistics-memory budgets and revision checks. An unlisted history is read until the interface returns no more steps/metadata. No partial page is marked as a complete import.
-- A per-account `backfill-v1.json` checkpoint stores hashed conversation keys, source-change signatures and completion/retry state. Existing `usage-v1` records without this checkpoint are checked again, so an earlier partial import can be repaired. Database and WAL changes invalidate completion. Unchanged completed archives are skipped; failed ones retry with backoff. Manual refresh overrides both and is queued if a sync is already running.
-- Archive work yields between conversations and continues in short batches. A single large conversation remains bounded by the reader's existing deadline; the batch interval is not a guarantee that every individual RPC finishes in that interval. Installation does not start a second ledger writer. The owning plugin process performs imports; disabling/stopping it or switching accounts/backends prevents the superseded import from continuing.
+- A device-level `backfill-v1.json` checkpoint stores hashed conversation keys, source-change signatures and completion/retry state. Existing `usage-v1` records without this checkpoint are checked again, so an earlier partial import can be repaired. Database and WAL changes invalidate completion. Unchanged completed archives are skipped; failed ones retry with backoff. Manual refresh overrides both and is queued if a sync is already running.
+- Archive work yields between conversations and continues in short batches. A single large conversation remains bounded by the reader's existing deadline; the batch interval is not a guarantee that every individual RPC finishes in that interval. Installation does not start a second ledger writer. The owning plugin process performs imports.
 - Only available local records can be recovered. Deleted/unavailable conversations or missing usage fields may leave gaps. This is local observed usage, not the provider's billing or account-wide consumption.
 
 ## Storage and privacy
 
-The new `usage-v1` directory is separate from `history-v1` (latest conversation statistics). It retains request time, model, Token counters and hashed request identities for historical accumulation, isolated by hashed account and conversation identifiers. It does not retain prompts, replies, account emails or credentials.
+The new `usage-v1` directory is separate from `history-v1` (latest conversation statistics). It retains request time, model, Token counters and hashed request identities for historical accumulation, unified across accounts under a deterministic local scope. Any legacy split-account directories are automatically merged and cleaned on startup. It does not retain prompts, replies, account emails or credentials.
 
 For the IDE it lives in `User/globalStorage/you-should-know-me.antigrative-dashboard-ide/usage-v1` under the IDE profile. Desktop history is not copied or mixed into IDE totals.
 

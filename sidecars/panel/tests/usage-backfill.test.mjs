@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-import {UsageLedger,DesktopUsage} from '../usage.mjs';
+import {UsageLedger,DesktopUsage,UNIFIED_SCOPE} from '../usage.mjs';
 import {TrajectoryReader} from '../trajectory-reader.mjs';
 import {discoverLocalConversations} from '../local-conversations.mjs';
 const account='a'.repeat(64),otherAccount='b'.repeat(64);
@@ -51,7 +51,7 @@ test('successful backfill survives restart, changed archives reimport, and refre
  const discoverLocal=async()=>({conversations:[{id,signature}],errors:0});const first=tracker(t,store,ledger,{discoverLocal});await first.sync();first.dispose();
  const second=tracker(t,store,new UsageLedger(ledger.directory),{discoverLocal});await second.sync();assert.equal(calls,1);
  signature='two';await second.sync();assert.equal(calls,2);await second.sync(true);assert.equal(calls,3);
- assert.equal((await ledger.summary(account)).requests,2);const saved=await readFile(join(ledger.directory,account,'backfill-v1.json'),'utf8');assert.equal(saved.includes(id),false);
+ assert.equal((await ledger.summary(account)).requests,2);const saved=await readFile(join(ledger.directory,UNIFIED_SCOPE,'backfill-v1.json'),'utf8');assert.equal(saved.includes(id),false);
 });
 
 test('failed history stays partial, respects backoff, retries automatically and allows manual override',async t=>{
@@ -67,11 +67,11 @@ test('refresh requested during pending incremental import runs a full follow-up 
  const forced=usage.sync(true);release();await Promise.all([pending,forced]);assert.equal(calls,2);assert.equal((await ledger.summary(account)).requests,2);
 });
 
-test('account or backend change during a read cannot import into either wrong ledger',async t=>{
+test('account change during a read unifies usage into the single device ledger',async t=>{
  const {ledger}=await setup(t);let release;const store=baseStore();store.client.trajectory=()=>new Promise(r=>{release=r;});
  const usage=tracker(t,store,ledger);const pending=usage.sync();while(!release)await delay(1);store.identity=otherAccount;store.epoch++;release(raw());await pending;
- assert.equal((await ledger.summary(account)).totalTokens,0);assert.equal((await ledger.summary(otherAccount)).totalTokens,0);
- store.client.trajectory=async()=>raw();await usage.sync();assert.equal((await ledger.summary(otherAccount)).requests,2);
+ assert.equal((await ledger.summary()).totalTokens,40);
+ store.client.trajectory=async()=>raw();await usage.sync();assert.equal((await ledger.summary()).requests,2);
 });
 
 test('reader stops paginating when the authenticated scope is superseded',async()=>{

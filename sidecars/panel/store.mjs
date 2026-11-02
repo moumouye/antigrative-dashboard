@@ -78,7 +78,7 @@ export class MetricsStore {
       }
       const raw = await this.client.trajectory(id,{force});
       if (!current()) throw new Error('后台已重新连接，请等待刷新');
-      if(this.onTrajectory&&scope){try{await this.onTrajectory(scope,id,raw);if(current())this.usagePersistenceError=false;}catch{if(current())this.usagePersistenceError=true;}}
+      if(this.onTrajectory){try{await this.onTrajectory(scope,id,raw);if(current())this.usagePersistenceError=false;}catch{if(current())this.usagePersistenceError=true;}}
       if (!current()) throw new Error('后台已重新连接，请等待刷新');
       const fresh = trajectoryMetrics(raw);
       // Optional background I/O cannot delay or fail the core metrics request.

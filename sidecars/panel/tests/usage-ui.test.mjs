@@ -230,3 +230,123 @@ test('usage-ui Y-axis scaling avoids extra ticks and stays within maximum scale'
     assert.ok(scale.intervals >= 3 && scale.intervals <= 5, `Intervals must be between 3 and 5, got ${scale.intervals}`);
   }
 });
+
+test('usage-ui filters legend models to only those active in the current range, sorts by token usage, and deduplicates -n suffix', () => {
+  assert.ok(
+    usageUiSource.includes('const visibleModels=[...new Set((value.models||[]).map(m=>m.replace(/-n$/,\'\')))].filter(m=>rangeModels.has(m)).sort((a,b)=>(rangeModelTotals.get(b)||0)-(rangeModelTotals.get(a)||0));'),
+    'usage-ui must filter visibleModels against rangeModels, sort by token usage descending, and deduplicate -n suffix'
+  );
+  assert.ok(
+    usageUiSource.includes('for(const model of visibleModels){'),
+    'usage-ui legend must only iterate over visibleModels active in the viewed range'
+  );
+  assert.ok(
+    usageUiSource.includes('const segments=visibleModels.filter(m=>!disabledModels.has(m)&&modelActiveTokens(bucket.models[m]||{})>0);'),
+    'usage-ui plot segments must only iterate over visibleModels'
+  );
+
+  // Functional test of range model filtering logic
+  const value = {
+    models: [
+      'Gemini 3.5 Flash',
+      'Gemini 3.6 Flash',
+      'Gemini 3.7 Flash',
+      'gemini-3.8-flash',
+      'gemini-3.8-flash-n',
+      'claude-opus-4-6-thinking'
+    ],
+    days: [
+      { date: '2026-08-15', models: { 'Gemini 3.6 Flash': { total: 1000, requests: 5 } } },
+      { date: '2026-10-04', models: { 'gemini-3.8-flash': { total: 5000, requests: 20 } } },
+      { date: '2026-10-15', models: { 'gemini-3.8-flash-n': { total: 10000, requests: 40 } } },
+      { date: '2026-10-16', models: { 'claude-opus-4-6-thinking': { total: 200, requests: 2 } } }
+    ]
+  };
+
+  const buckets = [{ from: '2026-10-01' }, { to: '2026-10-31' }];
+  const rangeStart = buckets[0].from, rangeEnd = buckets.at(-1).to;
+  const rangeModels = new Set();
+  const rangeModelTotals = new Map();
+  for (const day of value.days || []) {
+    if (day.date >= rangeStart && day.date <= rangeEnd) {
+      for (const [m, r] of Object.entries(day.models || {})) {
+        const model = m.replace(/-n$/, '');
+        if ((r.total || 0) > 0 || (r.requests || 0) > 0) rangeModels.add(model);
+        rangeModelTotals.set(model, (rangeModelTotals.get(model) || 0) + (r.total || 0));
+      }
+    }
+  }
+
+  const visibleModels = [...new Set((value.models || []).map(m => m.replace(/-n$/, '')))].filter(m => rangeModels.has(m)).sort((a,b) => (rangeModelTotals.get(b) || 0) - (rangeModelTotals.get(a) || 0));
+
+  assert.deepEqual(visibleModels, ['gemini-3.8-flash', 'claude-opus-4-6-thinking']);
+  assert.equal(visibleModels.includes('Gemini 3.5 Flash'), false, 'Unused 3.5 model must not be visible in October range');
+  assert.equal(visibleModels.includes('Gemini 3.6 Flash'), false, 'Unused 3.6 model must not be visible in October range');
+  assert.equal(visibleModels.includes('Gemini 3.7 Flash'), false, 'Unused 3.7 model must not be visible in October range');
+  assert.equal(visibleModels.filter(m => m === 'gemini-3.8-flash').length, 1, 'gemini-3.8-flash must be deduplicated to exactly 1 item');
+});
+
+test('usage-ui distinguishes recent active models from dormant trace models, hides zero-usage models in drilldown, and supports manual dismissal', () => {
+  assert.ok(
+    usageUiSource.includes('function isModelRecent(model){'),
+    'usage-ui must include isModelRecent helper for recency-aware model evaluation'
+  );
+  assert.ok(
+    usageUiSource.includes('function isModelDormantTrace(model,rangeTotals,totalTokens){'),
+    'usage-ui must include isModelDormantTrace helper for detecting dormant trace models'
+  );
+  assert.ok(
+    usageUiSource.includes('if(focusedBucket&&isZeroInFocus)continue;'),
+    'usage-ui must completely hide models with zero usage in the focused slice'
+  );
+  assert.ok(
+    usageUiSource.includes('legend-trace-btn'),
+    'usage-ui must include trace toggle button for expanding/collapsing dormant trace models'
+  );
+  assert.ok(
+    usageUiSource.includes('legend-dismiss'),
+    'usage-ui must include dismiss button for manual model hiding'
+  );
+
+  // Recency vs Dormant Trace test
+  const today = '2026-10-20';
+  const days = [
+    { date: '2026-10-14', models: { 'claude-opus-4-6-thinking': { total: 250000, requests: 12 } } },
+    { date: '2026-10-18', models: { 'gemini-3.8-flash': { total: 100000000, requests: 200 } } },
+    { date: '2026-10-19', models: { 'gemini-3.8-flash': { total: 200000000, requests: 400 } } },
+    { date: '2026-10-20', models: {
+      'gemini-3.8-flash': { total: 300000000, requests: 600 },
+      'gpt-5-preview': { total: 50000, requests: 3 } // New model with very few tokens today!
+    } }
+  ];
+
+  function isModelRecent(model, todayStr, daysArr) {
+    const cutoff = '2026-10-18'; // today - 2
+    for (const day of daysArr || []) {
+      if (day.date >= cutoff && day.date <= todayStr) {
+        const r = day.models?.[model] || day.models?.[model + '-n'];
+        if ((r?.total || 0) > 0 || (r?.requests || 0) > 0) return true;
+      }
+    }
+    return false;
+  }
+
+  function isModelDormantTrace(model, mTokens, totalTokens, todayStr, daysArr) {
+    if (isModelRecent(model, todayStr, daysArr)) return false;
+    const share = totalTokens > 0 ? mTokens / totalTokens : 0;
+    return share < 0.001;
+  }
+
+  const totalTokens = 600300000;
+  // 1. Claude Opus: last used Oct 14, silent for 6 days, share = 250K / 600M = 0.04% -> Dormant Trace!
+  assert.equal(isModelRecent('claude-opus-4-6-thinking', today, days), false);
+  assert.equal(isModelDormantTrace('claude-opus-4-6-thinking', 250000, totalTokens, today, days), true);
+
+  // 2. GPT-5 Preview: newly active today with only 50K tokens (0.008% share) -> Protected by recency!
+  assert.equal(isModelRecent('gpt-5-preview', today, days), true);
+  assert.equal(isModelDormantTrace('gpt-5-preview', 50000, totalTokens, today, days), false, 'New models used recently must never be classified as dormant trace');
+
+  // 3. Gemini 3.8 Flash: heavy usage and active today -> Not dormant trace!
+  assert.equal(isModelRecent('gemini-3.8-flash', today, days), true);
+  assert.equal(isModelDormantTrace('gemini-3.8-flash', 600000000, totalTokens, today, days), false);
+});

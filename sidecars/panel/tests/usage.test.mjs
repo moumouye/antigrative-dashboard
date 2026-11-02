@@ -4,7 +4,7 @@ import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
-import {UsageLedger,DesktopUsage,usageRecords,dateKey} from '../usage.mjs';
+import {UsageLedger,DesktopUsage,usageRecords,dateKey,cleanModel} from '../usage.mjs';
 import {MetricsStore} from '../store.mjs';
 const scope=s=>createHash('sha256').update(s).digest('hex'),account=scope('account A');
 const id='11111111-1111-1111-1111-111111111111',other='22222222-2222-2222-2222-222222222222';
@@ -17,7 +17,7 @@ test('usage survives restart, upserts, and deduplicates across conversations',as
  await ledger.ingest(account,id,raw({usage:{outputTokens:100}}));summary=await ledger.summary(account);assert.equal(summary.totalTokens,1120);
  await ledger.ingest(account,id,{trajectory:{generatorMetadata:[]}});assert.equal((await ledger.summary(account)).totalTokens,1120);
  const content=await readFile(ledger.file(account,id),'utf8');assert.equal(content.includes('private-request-id'),false);assert.equal(content.includes(id),false);
- assert.equal((await ledger.summary(scope('other'))).totalTokens,0);assert.throws(()=>ledger.file(account,'../escape'));
+ assert.equal((await ledger.summary(scope('other'))).totalTokens,1120);assert.throws(()=>ledger.file(account,'../escape'));
 });
 test('request time wins, planner-created is fallback, and unknown dates stay out of today',async t=>{
  assert.equal(dateKey(Date.parse('2026-10-10T16:05:00Z')),'2026-10-11');
@@ -32,6 +32,7 @@ test('thinking is included once, anomalous TPS is irrelevant, partial fields do 
  const ledger=await fixture(t);await ledger.ingest(account,id,raw());await ledger.ingest(account,id,raw({usage:{outputTokens:'invalid'}}));
  const summary=await ledger.summary(account);assert.equal(summary.totalTokens,1100);assert.equal(summary.partialRequests,1);
  const invalid=raw({usage:{inputTokens:'bad',cacheReadTokens:'bad',outputTokens:'50'}});assert.equal(usageRecords(invalid,id)[0].partial,true);
+ const zeroOutput=raw({usage:{outputTokens:undefined}});const zeroRec=usageRecords(zeroOutput,id)[0];assert.equal(zeroRec.output,0);assert.equal(zeroRec.partial,false);
 });
 test('weekly/monthly buckets use the configured calendar, unreadable records are reported',async t=>{
  const ledger=await fixture(t);await ledger.ingest(account,id,raw({start:'2026-09-30T16:00:00Z'}));
@@ -39,12 +40,38 @@ test('weekly/monthly buckets use the configured calendar, unreadable records are
  let summary=await ledger.summary(account,Date.parse('2026-10-11T08:00:00Z'));assert.equal(summary.monthTokens,2200);assert.equal(summary.weekTokens,1100);
  await writeFile(ledger.file(account,other),'{broken');summary=await new UsageLedger(ledger.directory).summary(account);assert.equal(summary.unreadableFiles,1);
 });
-test('backfill refreshes changed trajectories and isolates an account change in flight',async t=>{
+test('models with -n suffix are normalized and deduplicated across requests and summary',async t=>{
+ assert.equal(cleanModel('gemini-3.8-flash-n'),'gemini-3.8-flash');
+ const ledger=await fixture(t);
+ await ledger.ingest(account,id,raw({model:'gemini-3.8-flash',usage:{outputTokens:100}}));
+ await ledger.ingest(account,other,raw({model:'gemini-3.8-flash-n',usage:{responseId:'req-2',outputTokens:200}}));
+ const summary=await ledger.summary(account);
+ assert.deepEqual(summary.models,['gemini-3.8-flash']);
+ const day=summary.days[0];
+ assert.equal(Object.keys(day.models).length,1);
+ assert.equal(day.models['gemini-3.8-flash'].output,300);
+});
+test('backfill unifies usage across account changes in flight',async t=>{
  const ledger=await fixture(t);let calls=0,release;const store={identity:account,epoch:1,listConversations:async()=>[{id,modifiedAt:'one',status:'DONE'}],client:{trajectory:async()=>{calls++;return raw();}}};
  const tracker=new DesktopUsage(store,ledger);await tracker.sync();await tracker.sync();assert.equal(calls,1);assert.equal((await tracker.snapshot()).totalTokens,1100);
  store.listConversations=async()=>[{id:other,modifiedAt:'two',status:'DONE'}];store.client.trajectory=()=>new Promise(r=>{release=r;});
  const pending=tracker.sync();await new Promise(r=>setImmediate(r));store.identity=scope('B');store.epoch++;release(raw());await pending;
- assert.equal((await ledger.summary(store.identity)).totalTokens,0);
+ assert.equal((await ledger.summary(store.identity)).totalTokens,1100);
+ assert.equal((await tracker.snapshot()).totalTokens,1100);
+});
+test('legacy split account directories are automatically merged into unified ledger',async t=>{
+ const ledger=await fixture(t);const accA=scope('account 1'),accB=scope('account 2');
+ const convA=join(ledger.directory,accA),convB=join(ledger.directory,accB);
+ const {mkdir}=await import('node:fs/promises');
+ const {existsSync}=await import('node:fs');
+ await mkdir(convA,{recursive:true});await mkdir(convB,{recursive:true});
+ await writeFile(join(convA,createHash('sha256').update(id.toLowerCase()).digest('hex')+'.json'),JSON.stringify({schema:1,account:accA,records:usageRecords(raw({usage:{inputTokens:'100',outputTokens:'50'}}),id)}));
+ await writeFile(join(convB,createHash('sha256').update(other.toLowerCase()).digest('hex')+'.json'),JSON.stringify({schema:1,account:accB,records:usageRecords(raw({usage:{responseId:'private-request-id-2',inputTokens:'200',outputTokens:'80'}}),other)}));
+ const summary=await new UsageLedger(ledger.directory).summary();
+ assert.equal(summary.requests,2);
+ assert.equal(summary.totalTokens,2270);
+ assert.equal(existsSync(convA),false);
+ assert.equal(existsSync(convB),false);
 });
 test('MetricsStore forwards authenticated raw records and preserves live speed on ledger failure',async()=>{
  const history={load:async()=>null,save:async()=>null};let scopeSeen=null;
