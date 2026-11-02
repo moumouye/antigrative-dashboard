@@ -108,6 +108,7 @@ try{
   assert.ok((await v(`v.getElementById('hourly-summary').textContent`)).includes('峰值'),'peak summary');
   assert.ok((await v(`v.getElementById('totals').textContent`)).includes('¥'),'cost rendered in CNY');
   assert.equal(await v(`!!v.getElementById('locale')||!!v.querySelector('.eyebrow')`),false,'no duplicate language toggle or English eyebrow');
+  assert.equal(await evaluate(`metricsRequests.some(r=>r.usageSync===true)`),false,'opening a populated ledger never restarts a full import');
   assert.equal(await v(`v.getElementById('alert').hidden`),true,'partial records are not a warning');
   assert.equal(await v(`v.getElementById('note').hidden`),true,'the overview stays free of historical footnotes');
 
@@ -123,7 +124,7 @@ try{
   assert.ok(await v(`v.querySelectorAll('.bar-column').length`)>=28,'detail chart bars');
   assert.ok(await v(`v.querySelectorAll('#table-body tr').length`)>=1,'table rows');
   assert.equal(await v(`v.querySelectorAll('#comp-filters button').length`),3,'component filters');
-  assert.ok((await v(`v.getElementById('note').textContent`)).includes('字段不完整'),'incomplete rows are explained on the details tab');
+  assert.ok((await v(`v.getElementById('note').textContent`)).includes('时间未知'),'only genuinely missing timestamps are footnoted');
 
   const before=await v(`v.getElementById('totals').textContent`);
   await v(`v.querySelector('#comp-filters button').click()`);
@@ -134,7 +135,7 @@ try{
   const costCell=await v(`(v.querySelector('#table-body tr td:last-child')?.textContent)||''`);
   assert.ok(costCell.includes('¥'),'table cost column');
 
-  console.log(JSON.stringify({gate:'usage-ui',browser:chrome.replace('/Contents/MacOS/', ' '),checks:['entry','intro','single language control','hourly chart','peak summary','live refresh','CNY cost','muted partial note','details tab','table','component filter'],passed:true,pageErrors:errors}));
+  console.log(JSON.stringify({gate:'usage-ui',browser:chrome.replace('/Contents/MacOS/', ' '),checks:['entry','intro','single language control','no import on open','hourly chart','peak summary','live refresh','CNY cost','undated footnote','details tab','table','component filter'],passed:true,pageErrors:errors}));
   assert.deepEqual(errors,[]);
 }finally{
   try{ws?.close();}catch{}

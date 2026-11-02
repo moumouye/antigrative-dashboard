@@ -30,7 +30,7 @@ test('request time wins, planner-created is fallback, and unknown dates stay out
 test('thinking is included once, anomalous TPS is irrelevant, partial fields do not destroy known counts',async t=>{
  const r=usageRecords(raw(),id)[0];assert.equal(r.output,80);assert.equal(r.uncached+r.cacheRead+r.cacheWrite+r.output,1100);
  const ledger=await fixture(t);await ledger.ingest(account,id,raw());await ledger.ingest(account,id,raw({usage:{outputTokens:'invalid'}}));
- const summary=await ledger.summary(account);assert.equal(summary.totalTokens,1100);assert.equal(summary.partialRequests,1);
+ const summary=await ledger.summary(account);assert.equal(summary.totalTokens,1100);assert.equal(summary.partialRequests,0,'a merged row with every counter known is not partial');
  const invalid=raw({usage:{inputTokens:'bad',cacheReadTokens:'bad',outputTokens:'50'}});assert.equal(usageRecords(invalid,id)[0].partial,true);
 });
 test('weekly/monthly buckets use the configured calendar, unreadable records are reported',async t=>{

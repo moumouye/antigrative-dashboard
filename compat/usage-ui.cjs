@@ -1007,7 +1007,7 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     $('overview-tab').setAttribute('aria-selected',String(tab==='overview'));$('details-tab').setAttribute('aria-selected',String(tab==='details'));$('overview').hidden=tab!=='overview';$('details').hidden=tab!=='details';
     renderTotals();
     text('coverage',w(`已记录 ${full(value.requests)} 次请求${value.firstDate?' · 始于 '+value.firstDate:''}`,`${full(value.requests)} requests recorded${value.firstDate?' · since '+value.firstDate:''}`));
-    text('timezone',value.timeZone+' · '+(value.syncing?w('正在补录历史…','Syncing history…'):w('本地统计','Local usage')));
+    text('timezone',value.timeZone+' · '+(value.syncing?w('正在同步…','Syncing…'):w('本地统计','Local usage')));
     const alerts=[];
     if(value.unreadableFiles)alerts.push(w(`${value.unreadableFiles} 个账本文件无法读取，可重启插件重试`,`${value.unreadableFiles} ledger files could not be read; restart the plugin to retry`));
     if(value.missingConversations)alerts.push(w(`${value.missingConversations} 个历史对话暂不可读取，会自动重试`,`${value.missingConversations} conversations are temporarily unavailable and will retry`));
@@ -1017,7 +1017,6 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     // known fields. They are only relevant while inspecting numbers, so keep
     // them out of the overview instead of showing a permanent warning.
     const notes=[];
-    if(tab==='details'&&value.partialRequests)notes.push(w(`${value.partialRequests} 条历史记录字段不完整，已按已知部分计入`,`${value.partialRequests} historical records were incomplete and counted from known fields`));
     if(tab==='details'&&value.unknownRequests)notes.push(w(`${value.unknownRequests} 条请求时间未知，共 ${compact(value.unknownTokens)} Token`,`${value.unknownRequests} undated requests · ${compact(value.unknownTokens)} tokens`));
     $('note').hidden=!notes.length;text('note',notes.join(' · '));
     if(tab==='overview')renderHourlyOverview();else renderChart();

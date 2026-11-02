@@ -86,7 +86,7 @@ export function usageRecords(raw,conversationId,{maxRows=Infinity,maxBytes=Infin
     const identity=u.responseId?`response:${u.apiProvider||''}:${u.responseId}`:u.messageId?`message:${u.apiProvider||''}:${u.messageId}`:
       `fallback:${conversationId}:${JSON.stringify(g.stepIndices||[index])}:${at??'undated'}`;
     const row={id:hash(identity),at,model:cleanModel(chat.modelDisplayName||chat.responseModel||u.model||chat.model),
-      uncached,cacheRead:read,cacheWrite:write,output,partial:uncached===null||read===null||write===null||output===null||!cache&&uncached>0,
+      uncached,cacheRead:read,cacheWrite:write,output,partial:uncached===null||read===null||write===null||output===null,
       timeBasis:stamp(chat.chatStartMetadata?.createdAt)!==null?'request-start':at!==null?'planner-created':'unknown'};
     const old=rows.get(row.id);
     if(!old||sum(row)>sum(old)){
@@ -323,7 +323,7 @@ export class UsageLedger{
     }
     for(const r of seen.values()){
       const model=cleanModel(r.model);
-      models.add(model);if(r.partial)partialRequests++;
+      models.add(model);if(r.uncached===null||r.cacheRead===null||r.cacheWrite===null||r.output===null)partialRequests++;
       if(r.at===null){unknownTokens+=sum(r);unknownRequests++;continue;}
       const date=dateKey(r.at,this.timeZone);if(!daily.has(date))daily.set(date,{date,models:{}});
       const day=daily.get(date);day.models[model]||={uncached:0,cacheRead:0,cacheWrite:0,output:0,total:0,requests:0};
