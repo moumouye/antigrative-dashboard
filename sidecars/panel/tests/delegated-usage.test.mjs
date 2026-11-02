@@ -303,5 +303,5 @@ test('individual source ingestion and opening a child never double the account u
  assert.equal(childSnapshot.speed.conversationId,child);summary=await ledger.summary(account);assert.equal(summary.totalTokens,unitTokens*2);assert.equal(summary.requests,2);
  assert.deepEqual(fixture.state.sources.map(s=>s.id),[parent,child,child]);
  const rootFile=JSON.parse(await readFile(ledger.file(account,parent),'utf8')),childFile=JSON.parse(await readFile(ledger.file(account,child),'utf8'));
- assert.equal(rootFile.records.length,1);assert.equal(childFile.records.length,2);assert.equal((await ledger.summary(secondAccount)).totalTokens,0);
+ assert.equal(rootFile.records.length,1);assert.equal(childFile.records.length,2);assert.equal((await ledger.summary(secondAccount)).totalTokens,unitTokens*2,'the device ledger is shared across accounts');
 });

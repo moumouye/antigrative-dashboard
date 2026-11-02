@@ -4,7 +4,7 @@ import {mkdtemp,rm,mkdir,writeFile,readFile,readdir,stat} from 'node:fs/promises
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
-import {UsageLedger,DesktopUsage} from '../usage.mjs';
+import {UsageLedger,DesktopUsage,UNIFIED_SCOPE} from '../usage.mjs';
 
 const account='a'.repeat(64),hash=value=>createHash('sha256').update(String(value)).digest('hex');
 const id=n=>`${String(n).padStart(8,'0')}-1111-1111-1111-111111111111`;
@@ -26,19 +26,19 @@ test('a thousand-history import saves checkpoint once per slice rather than once
 test('checkpoint writes cap entries, strip unknown fields and retain active and retry checkpoints',async t=>{
  const ledger=await fixture(t),entries=Object.fromEntries(Array.from({length:5000},(_,n)=>[hash(n),{...row(n===0?'retry':'complete'),private:'not-a-checkpoint-field'}]));
  await ledger.saveBackfillState(account,'app',entries,{preferred:[hash(4999)]});
- const state=await ledger.backfillState(account,'app'),file=join(ledger.directory,account,'backfill-v1.json');
+ const state=await ledger.backfillState(account,'app'),file=join(ledger.directory,UNIFIED_SCOPE,'backfill-v1.json');
  assert.equal(Object.keys(state).length,4096);assert.ok(state[hash(0)],'Retry backoff survives compaction');assert.ok(state[hash(4999)],'The current pass has checkpoint priority');assert.equal(state[hash(0)].private,undefined);assert.ok((await stat(file)).size<=8*1024*1024);
 });
 
 test('bounded legacy checkpoint files retain useful entries during schema-compatible compaction',async t=>{
  const ledger=await fixture(t),entries=Object.fromEntries(Array.from({length:5000},(_,n)=>[hash(n),row(n===0?'retry':'complete')]));
- await mkdir(join(ledger.directory,account),{recursive:true});await writeFile(join(ledger.directory,account,'backfill-v1.json'),JSON.stringify({schema:1,account,host:'app',entries}));
+ await mkdir(join(ledger.directory,UNIFIED_SCOPE),{recursive:true});await writeFile(join(ledger.directory,UNIFIED_SCOPE,'backfill-v1.json'),JSON.stringify({schema:1,account:UNIFIED_SCOPE,host:'app',entries}));
  const state=await ledger.backfillState(account,'app',{preferred:[hash(4999)]});assert.equal(Object.keys(state).length,4096);assert.ok(state[hash(0)]);assert.ok(state[hash(4999)]);assert.equal(state.checkpointPartial,true);
 });
 
 test('oversized legacy checkpoints stay recoverable while bounded rebuilding reports partial',async t=>{
- const ledger=await fixture(t),directory=join(ledger.directory,account),file=join(directory,'backfill-v1.json');
- await mkdir(directory,{recursive:true});const original=JSON.stringify({schema:1,account,host:'app',entries:{[hash('old')]:row()},legacyPadding:'x'.repeat(8*1024*1024)});await writeFile(file,original);
+ const ledger=await fixture(t),directory=join(ledger.directory,UNIFIED_SCOPE),file=join(directory,'backfill-v1.json');
+ await mkdir(directory,{recursive:true});const original=JSON.stringify({schema:1,account:UNIFIED_SCOPE,host:'app',entries:{[hash('old')]:row()},legacyPadding:'x'.repeat(8*1024*1024)});await writeFile(file,original);
  const state=await ledger.backfillState(account,'app');assert.equal(state.checkpointPartial,true);assert.equal(state.checkpointRecovery,'oversized');assert.equal((await stat(file)).size,Buffer.byteLength(original),'Reading a large checkpoint does not alter it');
  const store={identity:account,epoch:1,listConversations:async()=>[{id:id(1),status:'DONE',modifiedAt:'2026-10-29T00:00:00Z'}],client:{trajectory:async()=>raw()}};
  const usage=new DesktopUsage(store,ledger,{host:'app',discoverLocal:async()=>({conversations:[],errors:0})});t.after(()=>usage.dispose());await usage.sync(true);
@@ -58,14 +58,14 @@ test('queued usage and checkpoint writes respect revoked ownership before execut
  const ledger=await fixture(t);let release,owned=true;ledger.queue=new Promise(resolve=>{release=resolve;});
  const store={identity:account,epoch:1,client:{}},usage=new DesktopUsage(store,ledger,{owns:()=>owned});
  const ingest=usage.ingest(account,id(1),raw(30)),checkpoint=ledger.saveBackfillState(account,'app',{[hash(1)]:row()},{isCurrent:()=>owned});owned=false;usage.dispose();release();await Promise.all([ingest,checkpoint]);
- assert.equal((await ledger.summary(account)).totalTokens,0);await assert.rejects(stat(join(ledger.directory,account,'backfill-v1.json')),error=>error.code==='ENOENT');
+ assert.equal((await ledger.summary(account)).totalTokens,0);await assert.rejects(stat(join(ledger.directory,UNIFIED_SCOPE,'backfill-v1.json')),error=>error.code==='ENOENT');
 });
 
 test('revocation after writing a temporary file prevents publishing usage and checkpoint files',async t=>{
  for(const kind of ['usage','checkpoint','usage-write-error','checkpoint-write-error'])await t.test(kind,async t=>{
   const ledger=await fixture(t);let owned=true;const write=ledger.writeRecord.bind(ledger);ledger.writeRecord=async(...args)=>{await write(...args);owned=false;if(kind.endsWith('write-error'))throw Error('The revoked writer failed');};
   if(kind.startsWith('usage'))await ledger.ingest(account,id(1),raw(),{isCurrent:()=>owned});else await ledger.saveBackfillState(account,'app',{[hash(1)]:row()},{isCurrent:()=>owned});
-  assert.deepEqual(await readdir(join(ledger.directory,account)),[]);assert.equal(ledger.revision,0);
+  assert.deepEqual(await readdir(join(ledger.directory,UNIFIED_SCOPE)),[]);assert.equal(ledger.revision,0);
  });
 });
 

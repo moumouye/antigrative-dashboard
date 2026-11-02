@@ -6,23 +6,23 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {setTimeout as wait} from 'node:timers/promises';
-import {UsageLedger,DesktopUsage,usageRecords} from '../usage.mjs';
+import {UsageLedger,DesktopUsage,usageRecords,UNIFIED_SCOPE} from '../usage.mjs';
 import {MetricsStore} from '../store.mjs';
 import {trajectoryMetrics} from '../metrics.mjs';
 import {budgetError} from '../collection-state.mjs';
 const scope='a'.repeat(64),id='11111111-1111-1111-1111-111111111111',other='22222222-2222-2222-2222-222222222222';
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const row=(key,output=100)=>({id:hash(key),at:Date.parse('2026-10-30T01:00:00Z'),model:'Fixture',uncached:100,cacheRead:400,cacheWrite:0,output,partial:false,timeBasis:'request-start'});
-async function fixture(t){const root=await mkdtemp(join(tmpdir(),'pulse-usage-disk-'));t.after(()=>rm(root,{recursive:true,force:true}));const ledger=new UsageLedger(join(root,'ledger'));await mkdir(join(ledger.directory,scope),{recursive:true});return {root,ledger};}
+async function fixture(t){const root=await mkdtemp(join(tmpdir(),'pulse-usage-disk-'));t.after(()=>rm(root,{recursive:true,force:true}));const ledger=new UsageLedger(join(root,'ledger'));await mkdir(join(ledger.directory,UNIFIED_SCOPE),{recursive:true});return {root,ledger};}
 function job(file,rows){const db=new DatabaseSync(file);db.exec('CREATE TABLE usage(id TEXT PRIMARY KEY,j TEXT)');const put=db.prepare('INSERT INTO usage VALUES(?,?)');for(const r of rows)put.run(r.id,JSON.stringify(r));db.close();}
 async function summary(ledger){for(let i=0;i<100;i++){const result=await ledger.summary(scope,Date.parse('2026-10-30T03:00:00Z'));if(!ledger.diskSummaryPending)return result;await ledger.diskSummaryPending;}throw Error('Summary did not settle');}
 async function until(check,ms=5000){const end=Date.now()+ms;while(!await check()){if(Date.now()>end)throw Error('Live usage did not settle');await wait(10);}}
 test('disk ledger merges exact rows, preserves old JSON, deduplicates mixed files and caches summary',async t=>{
  const {root,ledger}=await fixture(t),old=row('old'),same=row('same');
- const original=JSON.stringify({schema:1,account:scope,records:[old,same]});await writeFile(ledger.file(scope,id),original);
+ const original=JSON.stringify({schema:1,account:UNIFIED_SCOPE,records:[old,same]});await writeFile(ledger.file(scope,id),original);
  const file=join(root,'job.sqlite');job(file,[{...same,output:200},row('new')]);
  await ledger.ingestDisk(scope,id,file);assert.equal(await readFile(ledger.file(scope,id),'utf8'),original);
- await writeFile(ledger.file(scope,other),JSON.stringify({schema:1,account:scope,records:[row('new'),row('fourth')]}));
+ await writeFile(ledger.file(scope,other),JSON.stringify({schema:1,account:UNIFIED_SCOPE,records:[row('new'),row('fourth')]}));
  const result=await summary(ledger);assert.equal(result.requests,4);assert.equal(result.totalTokens,2500);assert.equal(result.unreadableFiles,0);
  assert.equal(await ledger.summary(scope,Date.parse('2026-10-30T03:00:00Z')),result);
  await ledger.ingestDiskRows(scope,id,{records:[{...same,output:null,at:null}]});const updated=await summary(ledger);assert.equal(updated.totalTokens,2500);assert.equal(updated.unknownRequests,0);
@@ -43,7 +43,7 @@ test('front-end summary does not wait for a disk import and mixed invalid JSON c
 
 test('legacy JSON above the old 16MiB cap imports and summarizes without a whole-file parse',{timeout:120000},async t=>{
  const {root,ledger}=await fixture(t),count=60000,file=ledger.file(scope,id),handle=await open(file,'w');
- try{await handle.write('{"schema":1,"account":"'+scope+'","records":[');let chunk='';for(let i=0;i<count;i++){const value={...row('large-'+i),model:'Model '+'X'.repeat(100)};chunk+=(i?',':'')+JSON.stringify(value);if(i%128===127){await handle.write(chunk);chunk='';}}if(chunk)await handle.write(chunk);await handle.write(']}');}finally{await handle.close();}
+ try{await handle.write('{"schema":1,"account":"'+UNIFIED_SCOPE+'","records":[');let chunk='';for(let i=0;i<count;i++){const value={...row('large-'+i),model:'Model '+'X'.repeat(100)};chunk+=(i?',':'')+JSON.stringify(value);if(i%128===127){await handle.write(chunk);chunk='';}}if(chunk)await handle.write(chunk);await handle.write(']}');}finally{await handle.close();}
  assert.ok((await stat(file)).size>16*1024*1024);const jobFile=join(root,'empty-job.sqlite');job(jobFile,[]);
  await ledger.ingestDisk(scope,id,jobFile);const result=await summary(ledger);assert.equal(result.requests,count);assert.equal(result.totalTokens,count*600);assert.equal(result.unreadableFiles,0);
 });
@@ -163,7 +163,7 @@ test('continuous writes display a stale syncing summary without repeated scans a
  try{
   for(const next of ['two','three','four']){names.push(next);await ledger.ingest(scope,other,raw(names));view=await tracker.snapshot({sync:false});assert.equal(view.summaryStale,true);assert.equal(view.syncing,true);}
   const tomorrow=await ledger.summary(scope,now+86400000);assert.equal(tomorrow.todayTokens,null,'a previous-day result cannot be reused for a different day');
-  const different=await ledger.summary('b'.repeat(64),now);assert.equal(different.accountKey,'b'.repeat(64));assert.equal(different.totalTokens,0,'cached usage must never cross account scopes');
+  const different=await ledger.summary('b'.repeat(64),now);assert.equal(different.accountKey,'b'.repeat(64));assert.equal(different.totalTokens,600,'every account reads the one device ledger');
  }finally{release();}
  await ledger.diskSummaryPending;
  view=await tracker.snapshot({sync:false});assert.equal(view.totalTokens,1200,'completed older scan is a marked interim result');assert.equal(view.summaryStale,true);assert.equal(view.syncing,true);
@@ -308,7 +308,7 @@ test('usage snapshot never waits for a slow JSON write and checkpoint writes do 
  try{
   view=await Promise.race([tracker.snapshot({sync:false}),wait(1500).then(()=>{throw Error('Usage snapshot waited for JSON');})]);assert.equal(view.totalTokens,600);assert.equal(view.summaryStale,true);assert.equal(view.syncing,true);
   const tomorrow=await ledger.summary(scope,Date.now()+86400000);assert.equal(tomorrow.todayTokens,null);assert.equal(tomorrow.summaryStale,true);
-  const foreign=await ledger.summary('b'.repeat(64));assert.equal(foreign.accountKey,'b'.repeat(64));assert.equal(foreign.totalTokens,0);
+  const foreign=await ledger.summary('b'.repeat(64));assert.equal(foreign.accountKey,'b'.repeat(64));assert.equal(foreign.totalTokens,600,'The device ledger is shared across accounts');
   ledger.cache=null;view=await tracker.snapshot({sync:false});assert.equal(view.totalTokens,null);assert.equal(view.summaryStale,true);
  }finally{release();}
  await writing;view=await tracker.snapshot({sync:false});assert.equal(view.totalTokens,1200);assert.equal(view.summaryStale,undefined);assert.equal(view.syncing,false);

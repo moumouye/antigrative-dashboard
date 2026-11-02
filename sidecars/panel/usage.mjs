@@ -288,7 +288,7 @@ export class UsageLedger{
     if(this.diskSummaryPending||this.diskSummaryRetry?.key===cacheKey&&this.diskSummaryRetry.at>Date.now())return;
     const staging=join(this.directory,UNIFIED_SCOPE,'.summary-'+randomUUID()+'.tmp');
     this.diskSummaryPending=this.diskJob({action:'summary',scope:UNIFIED_SCOPE,directory:join(this.directory,UNIFIED_SCOPE),staging,now,timeZone:this.timeZone,source:this.source},{isCurrent}).then(value=>{
-      if(!value||isCurrent()!==true)return;this.diskSummaryError=false;
+      if(!value||isCurrent()!==true)return;value.accountKey=scope;this.diskSummaryError=false;
       if(this.revision===scanRevision){this.cache={key:cacheKey,revision:scanRevision,value};this.diskSummaryRetry=null;}
       else {
         // Writes continued while the scan was running. Its result is usable
@@ -306,7 +306,7 @@ export class UsageLedger{
     const today=dateKey(now,this.timeZone),cacheKey=UNIFIED_SCOPE+':'+today,hoursFrom=hourFrom(now,this.timeZone);
     const unknown=()=>({accountKey:scope,timeZone:this.timeZone,today,days:[],models:[],todayTokens:null,weekTokens:null,monthTokens:null,totalTokens:null,requests:null,unreadableFiles:0,source:this.source,hoursFrom,summaryStale:true});
     if(this.usageWrites.get(UNIFIED_SCOPE))return this.cache?.key===cacheKey?{...this.cache.value,accountKey:scope,summaryStale:true}:unknown();
-    if(this.cache?.key===cacheKey&&this.cache.revision===this.revision)return {...this.cache.value,accountKey:scope};
+    if(this.cache?.key===cacheKey&&this.cache.revision===this.revision)return this.cache.value.accountKey===scope?this.cache.value:{...this.cache.value,accountKey:scope};
     const scanRevision=this.revision;
     const daily=new Map(),models=new Set(),seen=new Map();let unreadable=0,unknownTokens=0,unknownRequests=0,partialRequests=0;
     let files=[];try{files=await readdir(join(this.directory,UNIFIED_SCOPE));}catch(e){if(e.code!=='ENOENT')throw e;}

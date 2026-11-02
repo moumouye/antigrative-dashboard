@@ -10,7 +10,7 @@ import {setTimeout as sleep,setImmediate as yieldLoop} from 'node:timers/promise
 import {AntigravityClient} from '../client.mjs';
 import {MetricsStore} from '../store.mjs';
 import {SessionHistory} from '../history.mjs';
-import {DesktopUsage,UsageLedger} from '../usage.mjs';
+import {DesktopUsage,UsageLedger,UNIFIED_SCOPE} from '../usage.mjs';
 const big='11111111-1111-1111-1111-111111111111',small='22222222-2222-2222-2222-222222222222';
 const generator=(id,i)=>({stepIndices:[i],chatModel:{modelDisplayName:'Fixture',streamingDuration:'2s',usage:{responseId:id+'-'+i,apiProvider:'API_PROVIDER_GOOGLE_GEMINI',inputTokens:100,cacheReadTokens:300,outputTokens:100,responseOutputTokens:100},chatStartMetadata:{createdAt:'2026-10-30T00:00:00Z',contextWindowMetadata:{estimatedTokensUsed:500,maxContextTokens:1000}}}});
 async function until(check,timeout=45000){const start=Date.now();while(!await check()){if(Date.now()-start>timeout)throw Error('End-to-end background deadline');await sleep(30);}}
@@ -35,7 +35,7 @@ test('oversized conversation automatically completes without manual refresh whil
  assert.ok(loops>1);assert.ok(quotaCalls>2);assert.equal(result.speed.tps,50);assert.equal(result.speed.cache.hitRate,.75);assert.equal(result.speed.context.usedFraction,.5);assert.equal(result.speed.requests,2);
  const saved=await history.load(store.identity,big);assert.equal(saved.metrics.tps,50);assert.equal(saved.metrics.requests,2);
  await until(()=>store.background.active===null);assert.deepEqual(await readdir(join(dir,'collection-jobs')),[]);
- const files=await readdir(join(dir,'usage-v1',store.identity));assert.ok(files.some(f=>f.endsWith('.sqlite')),'Background rows are committed to disk ledger before scratch cleanup');
+ const files=await readdir(join(dir,'usage-v1',UNIFIED_SCOPE));assert.ok(files.some(f=>f.endsWith('.sqlite')),'Background rows are committed to disk ledger before scratch cleanup');
  let summary;await until(async()=>{summary=await ledger.summary(store.identity);return summary?.requests===3;});assert.equal(summary.totalTokens,1500);assert.equal(summary.unreadableFiles,0);
  const reads=bigReads;await store.snapshot({conversationId:big,force:true});assert.equal(bigReads,reads,'Stable completed revision does not re-read oversized trajectory');
  t.diagnostic(JSON.stringify({steps:count,normalConversationReads:smallReads,quotaCalls,foregroundPolls:loops,oversizedReads:bigReads,usageRequests:summary.requests,totalTokens:summary.totalTokens}));
