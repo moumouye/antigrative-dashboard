@@ -14,6 +14,7 @@
     "test:ide": "node --test ide/tests/*.test.mjs && node tools/check-ide-ui.mjs",
     "test:usage-ui": "node tools/check-usage-ui.mjs && node tools/check-usage-ui.mjs --ide && node tools/check-usage-performance.mjs && node tools/check-task-usage-ui.mjs",
     "test:usage-ui:cdp": "node tools/check-usage-ui-cdp.mjs",
+    "ui:reload": "node tools/reload-live-ui.mjs",
     "test:panel-ui": "node tools/check-panel-ui.mjs && node tools/check-quota-groups-ui.mjs",
     "test:update-process": "node tools/check-update-cwd.mjs && node tools/check-update-cwd.mjs --junction && node tools/check-update-cwd.mjs --junction --physical-target --runtime-data"
   }
