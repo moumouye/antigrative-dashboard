@@ -6,10 +6,16 @@ import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {trajectoryMetrics} from '../sidecars/panel/metrics.mjs';
+import {usageViewPath} from '../compat/usage-view.mjs';
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..');
 const version=JSON.parse(await readFile(join(repo,'plugin.json'),'utf8')).version;
 const output=resolve(repo,process.argv.find(x=>x.startsWith('--output='))?.slice(9)||'docs/assets');
-const sources=await Promise.all(['i18n.cjs','theme.cjs','inline-widget.cjs','usage-ui.cjs'].map(f=>readFile(join(repo,'compat',f),'utf8')));
+const sources=await Promise.all([
+  readFile(join(repo,'compat','i18n.cjs'),'utf8'),
+  readFile(join(repo,'compat','theme.cjs'),'utf8'),
+  readFile(join(repo,'compat','inline-widget.cjs'),'utf8'),
+  readFile(usageViewPath(),'utf8'),
+]);
 const extract=s=>{assert.ok(s.includes('module.exports = '));return s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');};
 const install=`window.__agPulseI18nFactory=(${extract(sources[0])});window.__agPulseThemeFactory=(${extract(sources[1])});window.__agPulseUsageFactory=(${extract(sources[3])});(${extract(sources[2])})();`;
 const ids={main:'11111111-1111-1111-1111-111111111111',subagent:'22222222-2222-2222-2222-222222222222'};

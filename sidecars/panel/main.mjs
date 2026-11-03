@@ -7,6 +7,7 @@ import { MetricsStore } from './store.mjs';
 import { DesktopUsage } from './usage.mjs';
 import { loadSidecarSdk } from './sdk.mjs';
 import { RuntimeUi, makeRendererSource } from '../../compat/runtime-ui.mjs';
+import { usageViewPath, usageViewExpression } from '../../compat/usage-view.mjs';
 import { platformPaths } from '../../compat/platform.mjs';
 import { PreferencesStore } from '../../compat/preferences.mjs';
 import { SidecarOwner } from '../../compat/sidecar-owner.mjs';
@@ -40,7 +41,7 @@ const metrics = async input => {
   const base=await store.snapshot(input);if(input?.usageSync===true)void usage.sync(true);
   return {...base,usage:await usage.snapshot({sync:input?.usageSync===true}),preferences:await preferences.snapshot(),theme:await readHostTheme(),integration:integration.health};
 };
-const usageSource=()=>{const s=readFileSync(join(HERE,'..','..','compat','usage-ui.cjs'),'utf8');return `window.__agPulseUsageFactory=(${s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'')});`;};
+const usageSource=()=>{const s=readFileSync(usageViewPath(),'utf8');return `window.__agPulseUsageFactory=${usageViewExpression(s)};`;};
 const updateSource=()=>{const s=readFileSync(join(HERE,'..','..','compat','update-ui.cjs'),'utf8');return `window.__agPulseUpdateFactory=(${s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'')});`;};
 const staticFiles = { '/': ['index.html', 'text/html'], '/styles.css': ['styles.css', 'text/css'], '/format.mjs': ['format.mjs', 'text/javascript'] };
 const inlineSource=()=>{

@@ -39,14 +39,19 @@ git log upstream/main -60 --name-only --format='COMMIT' \
 | `sidecars/panel/usage.mjs` | 10 | 禁改 | 112/41 行（账本内核，需保留） |
 | `sidecars/panel/app.js` | 12 | 禁改 | 无 |
 | `ide/main.mjs` | 8 | 覆盖区 | 3 行；注入点入口，见 [`contracts.md`](contracts.md) |
+| `sidecars/panel/main.mjs` | 10 | 禁改 | 1 行；App 注入点，改指解析器 |
 | `tools/check-usage-ui.mjs` | 2 | 覆盖区 | 53 行 |
 | `tools/check-cold-start-ui.mjs` | 2 | 覆盖区 | 1 行（视图路径） |
 | `tools/check-teamwork-ui.mjs` | 0 | 覆盖区 | 1 行（视图路径） |
 | `tools/check-collection-state-ui.mjs` | 1 | 覆盖区 | 1 行（视图路径） |
 | `tools/check-widget-lifecycle.mjs` | 1 | 覆盖区 | 1 行（视图路径） |
+| `tools/check-usage-performance.mjs` | 1 | 覆盖区 | 2 行（改用解析器） |
+| `tools/check-sidebar-subagent-ui.mjs` | 1 | 覆盖区 | 6 行（改用解析器） |
+| `tools/render-readme-assets.mjs` | 0 | 覆盖区 | 7 行（改用解析器） |
 | `sidecars/panel/usage-disk-worker.mjs` | 1 | 覆盖区 | 26/5 行 |
 | `sidecars/panel/pricing.mjs` | 0 | 自建 | 新增 277 行 |
 | `compat/usage-ui.local.cjs` | 0 | 自建 | 新增 1102 行（自研用量视图） |
+| `compat/usage-view.mjs` | 0 | 自建 | 视图路径唯一解析处，含回退 |
 | `tools/check-usage-ui-cdp.mjs` | 0 | 自建 | 新增 149 行 |
 | `tools/reload-live-ui.mjs` | 0 | 自建 | 新增 49 行 |
 | `tools/local-gate.mjs` | 0 | 自建 | 门禁入口 |

@@ -6,11 +6,17 @@ import {dirname,join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {trajectoryMetrics} from '../sidecars/panel/metrics.mjs';
+import {usageViewPath} from '../compat/usage-view.mjs';
 
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..');
 const preview=process.argv.includes('--preview');
 const ids={main:'11111111-1111-1111-1111-111111111111',child:'22222222-2222-2222-2222-222222222222',other:'33333333-3333-3333-3333-333333333333'};
-const files=await Promise.all(['i18n.cjs','theme.cjs','usage-ui.cjs','inline-widget.cjs'].map(name=>readFile(name==='inline-widget.cjs'&&process.env.AG_PULSE_SIDEBAR_SOURCE?process.env.AG_PULSE_SIDEBAR_SOURCE:join(repo,'compat',name),'utf8')));
+const files=await Promise.all([
+  readFile(join(repo,'compat','i18n.cjs'),'utf8'),
+  readFile(join(repo,'compat','theme.cjs'),'utf8'),
+  readFile(usageViewPath(),'utf8'),
+  readFile(process.env.AG_PULSE_SIDEBAR_SOURCE||join(repo,'compat','inline-widget.cjs'),'utf8'),
+]);
 const extract=source=>source.slice(source.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
 const install=`window.__agPulseI18nFactory=(${extract(files[0])});window.__agPulseThemeFactory=(${extract(files[1])});window.__agPulseUsageFactory=(${extract(files[2])});(${extract(files[3])})();`;
 const usage={accountKey:'sidebar-fixture',today:'2026-10-30',timeZone:'Asia/Shanghai',models:['Gemini'],days:[{date:'2026-10-30',models:{Gemini:{uncached:400,cacheRead:600,cacheWrite:0,output:180,total:1180,requests:1}}}],todayTokens:1180,weekTokens:1180,monthTokens:1180,totalTokens:1180,requests:1,syncing:false};

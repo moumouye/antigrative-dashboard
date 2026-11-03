@@ -2,6 +2,15 @@
 
 替代在上游 `CHANGELOG.md` 中追加条目的做法（理由见 [`anti-patterns.md`](anti-patterns.md) AP-004）。本文件只记录**相对 `upstream/main` 的增量**，上游自身的变更看 `CHANGELOG.md`。
 
+## 2026-11-03 视图加载路径收口
+
+| 范围 | 内容 | 提交 |
+| :--- | :--- | :--- |
+| 加载 | 新增 `compat/usage-view.mjs` 作为视图文件唯一解析处：本地文件存在即用，缺失回退上游基线 | 本批 |
+| App | `sidecars/panel/main.mjs:43` 改走解析器。此前仍按名读 `compat/usage-ui.cjs`，重装后会加载已还原的上游简版 | 本批 |
+| 门禁 | `check-usage-performance`、`check-sidebar-subagent-ui`、`render-readme-assets` 三处改走解析器，此前同样指向旧文件 | 本批 |
+| 测试 | `entry-usage.test.mjs` 的模块桩补 `usage-view.mjs`，否则 VM 加载器拒绝未知导入 | 本批 |
+
 ## 2026-11-02 治理层
 
 | 范围 | 内容 | 提交 |

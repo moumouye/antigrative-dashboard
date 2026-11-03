@@ -81,6 +81,24 @@ git diff $(git rev-parse upstream/main~20)..upstream/main -- compat/usage-ui.cjs
 
 **替代**：`package.json` 只保留一个稳定入口 `gate`，本地门禁清单由 `tools/local-gate.mjs` 持有。新增门禁只改后者，前者从此冻结。
 
+## AP-007 只改一条加载路径就宣布搬迁完成
+
+**否决日期**：2026-11-03
+
+**历史方案**：把 `usage-ui.cjs` 的实现迁到 `usage-ui.local.cjs` 时，只更新了 `ide/main.mjs` 与七处门禁，把 `compat/usage-ui.cjs` 还原成上游原样。
+
+**失效根因**：视图文件有两条独立注入管线，App 与 IDE 互不共用。`sidecars/panel/main.mjs:43` 是 App 那条线的入口，仍按文件名写死读 `usage-ui.cjs`；另有三个工具（性能门禁、侧栏门禁、README 截图）同样按名加载。门禁全绿只是因为门禁自己也已经被改成读新路径 —— **被测物与测试同时搬迁，等于互相担保**。真正的爆炸点在重装插件之后：App 会加载已被还原的上游 325 行版本，界面退回简版，而本地任何检查都不会报错。
+
+同类残留还有打包白名单两处、更新链路必需文件清单一处。判定一个文件搬迁是否完成，唯一可靠的方法是**全仓库按文件名检索**，不是跑门禁：
+
+```bash
+grep -rn "usage-ui\.cjs" --include=*.mjs --include=*.cjs --include=*.py . | grep -v node_modules
+```
+
+**替代**：所有消费者统一走 `compat/usage-view.mjs` 的 `usageViewPath()`，解析与回退集中在一处；新增消费者时先接解析器，不再自行拼路径。回退语义保证旧安装（只有单文件）不会因为缺文件而崩。
+
+**教训**：跨进程、跨语言的加载路径不受任何单一测试覆盖。搬迁类改动必须以「引用点枚举」收尾，不能以「门禁通过」收尾。
+
 ## AP-006 用 merge 吸收上游更新
 
 **否决日期**：2026-11-02
