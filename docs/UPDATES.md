@@ -1,241 +1,99 @@
-# Manual App updates
+# 应用更新与容灾状态机规范 (App Updates & Disaster Recovery Spec)
 
-Open the context card, choose **⋯ → Check for updates**. Checking starts only
-after a click. It checks stable GitHub Releases, not commits on `main`, and does
-not change the installed version merely because unpublished source has changed.
+本文档定义 Antigravity Pulse（App 端）在线更新状态机、Windows NTFS 目录联接（Junction）兼容协议、跨进程生命周期锁与原子灾备回滚规范。
+代码实现（`sidecars/panel/updater.mjs`、`compat/update-worker.py`、`compat/update-lock.py`）必须严格遵循本文档的状态转移矩阵与物理红线。
 
-This adapter updates **Antigravity App only**. It does not install an IDE VSIX,
-change a CLI status line, update Antigravity itself, or modify account settings.
-Language, theme and usage data are retained. No transcript or account credential
-is included in the public GitHub requests.
+---
 
-The update UI shows measured download bytes/percentage. Checking,
-verification, extraction, backup and installation use an indeterminate bar;
-they do not invent an overall percentage. The fill follows the host accent and
-uses transform-only motion. A stage change does not animate a completed check
-backwards into a new download. Worker progress is optional, bounded, allowlisted
-metadata on stderr; the verified final result remains a separate stdout message.
+## 1. 业务目标与物理不变量 (Context & Invariants)
 
-## Relocated user directories (Issue #23)
+* **领域核心目标**：提供确定性、断电防毁、零网络污染的插件自身平滑原子更新能力；
+* **物理与范围不变量 (Invariants)**：
+  1. **严格限定更新范围**：本更新器**仅更新 Antigravity Pulse App 插件自身**；严禁更新 IDE 插件、CLI 适配器、宿主 Electron 核心或修改用户账号配置；
+  2. **跨进程互斥排他锁 (Single-Writer Invariant)**：同一时刻全机仅允许一个生命周期操作（安装/更新/卸载/回滚）执行，通过操作系统级非阻塞锁锁定 `.antigravity-pulse-update.lock`，**严禁使用文件软链接或删除锁文件（Unlink）**；
+  3. **事务原子性与不可破坏性**：新包在临时沙箱完整校验 SHA-256 并生成灾备备份前，严禁覆盖既有运行目录；失败必须无损回滚。
 
-A user-owned ancestor such as `%USERPROFILE%\.gemini` may be a Windows NTFS
-junction to another disk. The updater accepts both the configured path and the
-physical module path supplied by Node when they resolve to the native App plugin
-installation. The plugin directory itself, runtime entries, staging and recovery
-directories must still be real directories, with no redirected files inside the
-managed runtime. Installation, locking and recovery use the captured physical
-directory, and recheck directory identity before filesystem changes. Recovery
-journals bind to that installation; a changed destination is rejected.
+---
 
-Older sidecars may store their data inside `sidecars/panel/data`. In that case,
-update backups are placed in `.antigravity-pulse-update-backups` beside the plugin
-directory, so a backup cannot recursively copy itself into its source. The actual
-data directory stays in place. Transaction and backup roots cannot overlap.
+## 2. 更新生命周期有限状态机 (Lifecycle State Machine Matrix)
 
-Local installation-path errors now have their own localized message instead of
-appearing as an invalid package. A plan older than 15 minutes or superseded by
-another installation asks for a fresh check. A failed or malformed worker reply
-does not automatically rerun installation or promise that old files were kept;
-check again to establish the installed version before retrying.
+更新流程严格由受限的状态机驱动，任何未列出的状态跃迁均被物理阻断：
 
-**Existing affected installations:** v0.8.12 and earlier can reject a junction
-before contacting GitHub, so a new release alone cannot repair their online
-updater. Install a package containing this fix once with `python manage.py install`
-(`python3` on Linux/macOS), then completely reopen Antigravity. Use the App ZIP
-from **v0.8.13** or later. Keep the `.gemini` junction and saved data; removing
-either is unnecessary.
-
-`npm run test:update-process` covers a real worker started through the Windows
-command launcher (or POSIX subprocess), both logical and physical relocated paths,
-and runtime-local data. Synthetic homes and packages keep these checks separate
-from installed software and personal records.
-
-## Widget lifecycle after host updates
-
-A disposed widget could finish a delayed preference read and schedule a new
-mount after its replacement had started. This left an offline icon-only copy
-beside the working strip. The failure was reproduced in a browser fixture and
-observed in Windows Antigravity App 2.28.0; host updates are not the only possible
-trigger for this asynchronous lifecycle bug.
-
-The widget now rejects preference/layout/mount callbacks after disposal and
-cleans up identifiable leftover plugin strips before mounting. Native controls
-and saved data are retained. Lifecycle regressions run in the shared UI gate.
-
-## Bounded history usage import
-
-Large local conversation libraries used to make the collector repeatedly build a
-full candidate set and continue importing archives for a long time. A 1000+ history
-library could keep the host API, disk ledger and Node heap busy even when the user
-was only viewing the current conversation.
-
-**v0.8.12** completes the history-import protections and fixes the three runtime
-problems reported in #22:
-
-- Opening **View token usage**, or clicking the usage window's top-right circular
-  arrow **Refresh usage**, requests historical synchronization. Ordinary metrics
-  polling, card refreshes and expired-quota refreshes do not request backfill in
-  either App or standalone IDE.
-- An import consumes a stable, bounded candidate queue across slices instead of
-  rebuilding its source list every 250 ms. Deleted, temporarily unlisted or
-  evicted IDs cannot leave an unreachable item that schedules work forever.
-  New top-level conversations wait for the next requested pass; delegated children
-  may join the current queue within its budget. Each attempted item makes progress,
-  and unavailable records retain retry/partial status.
-- Collection guards use a synchronous cached ownership boolean. File-change
-  notifications invalidate it promptly, periodic checks remain the fallback, and
-  request/write boundaries verify ownership asynchronously. Per-page guards do
-  not create unawaited ownership reads or repeatedly read settings files.
-- Queued usage and conversation-history writes recheck ownership/account state
-  when they start and before commit, removing temporary files on cancellation.
-  An atomic rename already handed to the OS cannot be recalled.
-- Checkpoint metadata is limited to 4,096 entries and an 8 MiB read/write budget,
-  is saved once per slice, and preserves persistent retry counts across restarts.
-  An oversized legacy `backfill-v1.json` is retained as
-  `backfill-v1.oversized-<uuid>.json` when bounded metadata is rebuilt; this does
-  not delete the per-conversation usage ledger.
-- A concurrent import cannot publish an old summary as the cache for a newer
-  ledger revision. Candidate, page and memory/time limits retain partial coverage
-  instead of implying that every historical record was read.
-
-## IDE 2.6.0 compatibility (Issue #26)
-
-Antigravity IDE 2.6.0 uses `agy --hub` for its language-service backend. The
-IDE adapter recognizes that form and the older `language_server_*` form while
-keeping the renderer port tied to the real IDE root. Renderer attachment does
-not wait for metrics discovery, so the composer controls stay mounted during a
-temporary metrics outage. Ordinary `agy`, LSP and ambiguous multi-instance
-processes are rejected.
-
-Current-conversation requests continue to be recorded during ordinary polling.
-The collector preserves existing usage records and settings. Usage is local
-observed consumption, not provider billing.
-
-## Windows TUN port discovery (Issue #27)
-
-**v0.8.18** excludes fake-IP `LISTENING` rows that can hide the real local API
-port. The Windows fallback queries candidate PIDs once and revalidates socket
-addresses, ports and states. It accepts the reported nonstandard `State: 0`
-only with a local binding and an unconnected remote endpoint; `Bound`, `Closed`
-and other processes remain excluded.
-
-App and IDE share this fallback. Missing current HTTP/CDP ports trigger a
-supplementary query even when another listener or a reused historical HTTP port
-is visible. Log ports remain hints, not proof of ownership. Native discovery
-keeps its fast path; timeout/output budgets, concurrent-request coalescing and
-failure backoff remain in place. No VPN setting changes or data reset are needed.
-
-Install **v0.8.18** through **Context details → ⋯ → Check for updates**, then fully
-quit and reopen the host once. A plugin-only restart cannot revoke old callbacks
-already recreated in the open page. If an older updater already fails installation,
-use `antigrative-dashboard-0.8.18.zip` for a one-time manual repair; standalone IDE
-users should install `antigrative-dashboard-ide-0.8.18.vsix` and reopen the IDE.
-Existing release tags remain available. No statistics reset or manual deletion of
-checkpoint/ledger files is required for this upgrade.
-
-## Windows working-directory fix (Issue #21)
-
-Windows can refuse to rename `sidecars` while the sidecar's parent `cmd.exe`
-launcher has its current directory inside that tree. Moving Node alone does not
-release the parent's directory handle. This produced a successful version check
-followed by an installation error. Windows now atomically replaces public runtime
-files while leaving directory identities intact. The sidecar and Python worker
-also use the stable plugin root. The host launcher itself is not modified.
-
-Old installations with this bug may fail before they can install the fixed
-updater. Install a package containing the fix once using `python manage.py install`
-and completely reopen the App. Existing language preferences and usage records
-are retained. A failed old attempt does not imply data should be deleted.
-
-Interpreter discovery checks Python 3.10+ before starting a worker. On Windows,
-an unusable Store alias or old Python can fall back to `py -3` or `python3` during
-this read-only check. Once an installation worker has started, a failure never
-launches another installation automatically.
-
-Network errors use short predefined messages for timeouts, DNS, certificate trust,
-proxy connections and HTTP rejection. Locked/unwritable files and unavailable
-Python have their own messages. Raw paths, proxy credentials, HTTP payloads and
-tracebacks are not passed to the UI. Certificate/hostname verification stays on.
-Windows static system proxies remain available when the environment contains only
-`NO_PROXY`; explicit per-protocol environment settings still take precedence.
-Checks share one 60-second network budget across the API and official-page fallback,
-with a separate outer cancellation guard. This does not change system settings or
-install any certificates. DNS resolution and operating-system scheduling can delay
-cleanup; an installation is never killed in the middle of a filesystem swap.
-
-## Verification before replacement
-
-- Exact repository, stable version, App archive name and checksum asset binding.
-- HTTPS host and redirect allowlist; CA and hostname verification remain enabled.
-  A failed TLS handshake may retry once with TLS 1.2 for local proxy
-  compatibility. Certificate verification failures never use that retry.
-- Mandatory SHA-256 and exact declared byte count. Missing or invalid checksums
-  stop the installation. SHA-256 detects inconsistent files; it is not an
-  independent publisher signature if the release account itself is compromised.
-- Bounded download, expanded size and entry count; unsafe paths, duplicate
-  normalized paths, symlinks, Windows junctions, private runtime directories and
-  a mismatched or incomplete manifest are rejected.
-- No same-version reinstall or downgrade. A plan expires after 15 minutes and
-  is checked again against the installed version before installation.
-
-The limits are operational safeguards (64 MiB archive, 256 MiB expanded, 8,192
-entries), not claims of universally safe memory limits. Exceeding them fails
-before runtime replacement.
-
-## Installation and recovery
-
-An OS-backed lock prevents concurrent operations by the new updater and lifecycle
-manager. It is released when a process exits, including forced termination.
-The lock file remains on disk; its existence alone does not mean an operation is
-running. Older third-party installers that ignore the lock cannot be coordinated.
-
-The updater creates a full backup, stages the new runtime on the same filesystem,
-and writes a recovery journal before replacing runtime files on Windows or runtime
-trees on Linux/macOS. Windows records a validated file inventory, preserves private
-data directories, removes obsolete public files, and commits the manifest last.
-Recovery rejects linked/junction paths and layout conflicts before restoring any
-file. Ordinary failures
-restore the previous runtime. Recovery failure retains the previous files,
-backup, journal and a standalone recovery helper. A completed installation keeps
-its external backup under the plugin data directory's `updates/backup-*` folder.
-
-If an interrupted update left the App unable to start its plugin, use the saved
-helper outside the replaced runtime. In PowerShell:
-
-```powershell
-$pluginTarget = Join-Path $env:USERPROFILE '.gemini/config/plugins/antigravity-pulse'
-$recoveryHelper = Join-Path $env:USERPROFILE '.gemini/config/plugins/.antigravity-pulse-update-transaction/recover.py'
-python $recoveryHelper recover --target $pluginTarget
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> CHECKING : 用户手动点击检查
+    CHECKING --> READY : 发现合法新版本
+    CHECKING --> IDLE : 已是最新 / 检查失败
+    READY --> DOWNLOADING : 启动下载
+    DOWNLOADING --> VERIFYING : 字节流接收完毕 (≤64MB)
+    VERIFYING --> EXTRACTING : SHA-256 校验通过
+    VERIFYING --> ROLLBACK : 校验失败 (verification)
+    EXTRACTING --> ACQUIRING_LOCK : 解包成功
+    ACQUIRING_LOCK --> BACKING_UP : 抢占物理锁成功
+    ACQUIRING_LOCK --> IDLE : 抢锁失败 (busy)
+    BACKING_UP --> SWAPPING : 灾备副本建立完毕
+    SWAPPING --> COMPLETED : 原子重命名/Junction切换成功
+    SWAPPING --> ROLLBACK : 发生 I/O 异常 / 句柄占用
+    ROLLBACK --> IDLE : 恢复备份归位
+    COMPLETED --> [*] : 提示重启生效
 ```
 
-On Linux/macOS:
+### 状态转移与异常守卫矩阵
 
-```sh
-python3 "$HOME/.gemini/config/plugins/.antigravity-pulse-update-transaction/recover.py" recover \
-  --target "$HOME/.gemini/config/plugins/antigravity-pulse"
-```
+| 当前状态 (State) | 触发事件 (Event) | 守卫断言 (Guard Condition) | 目标状态 (Next State) | 副作用动作 (Action) |
+| :--- | :--- | :--- | :--- | :--- |
+| `IDLE` | 手动触发检查 | 距离上次计划 $<15\text{ min}$ | `CHECKING` | 启动受限 Python Worker 查询 GitHub API |
+| `CHECKING` | 收到 Release 元数据 | 包含合法 zip 与 sha256 且版本高于当前 | `READY` | 缓存计划元数据 (15分钟有效窗口) |
+| `READY` | 用户确认更新 | 计划未过期 ($t - t_0 < 900\text{ s}$) | `DOWNLOADING` | 流式拉取安装包并上报进度 (`received/total`) |
+| `DOWNLOADING` | 下载完成 | 文件大小 $\le 64\text{ MiB}$ 且网络无中断 | `VERIFYING` | 提取预期哈希比对实际 SHA-256 |
+| `VERIFYING` | 哈希校验完成 | `actualSha256 === expectedSha256` | `EXTRACTING` | 解压至隔离的 `.antigravity-pulse-staging` 目录 |
+| `EXTRACTING` | 解包完成 | 包含白名单清单所必需的核心模块文件 | `ACQUIRING_LOCK` | 执行 `lifecycle_lock` 抢占排他锁 |
+| `ACQUIRING_LOCK` | 操作系统加锁 | Windows `msvcrt.locking` / POSIX `flock` 成功 | `BACKING_UP` | 将当前运行目录快照备份至外部目录 |
+| `BACKING_UP` | 备份完成 | 备份目录不在插件源码子树内 | `SWAPPING` | 执行 Windows 目录句柄释放并原子替换目录 |
+| `SWAPPING` | 目录替换成功 | 物理目录存在且入口模块可读 | `COMPLETED` | 清理临时沙箱，写入成功标记 |
+| `* (任意状态)` | 捕获不可恢复异常 | 触发任意错误（I/O、权限、进程中断） | `ROLLBACK` | 从备份目录原子复原，清理锁状态 |
 
-Recovery does not download or execute new release code. It restores the old
-runtime from its saved snapshot. Do not delete the transaction directory while
-recovery is needed. The new installer and uninstaller refuse to overwrite a
-pending recovery journal.
+---
 
-After successful installation, **Reload plugin** restarts the plugin sidecar.
-“Installed” verifies files/version; it does not claim the new runtime has already
-passed a real conversation test. Unexpected future host changes, a broken future
-release, power loss with filesystem corruption, or damaged/missing backup media
-cannot be guaranteed recoverable by this mechanism.
+## 3. Windows NTFS 目录联接与句柄释放协议 (Junctions & Handle Release)
 
-## Validation scope
+针对用户重定向系统目录（如 `%USERPROFILE%\.gemini` 为 NTFS Junction 挂载至其他磁盘）的物理环境，必须遵守以下契约：
 
-Windows tests reproduce the full command-launcher/Node/Python chain, force process
-termination before/after each runtime group and during file replacement, retry
-interrupted recovery, reject junction escapes, recover a missing main manifest
-using the saved helper, exclude concurrent processes, and preserve synthetic user data.
-Node and browser tests cover multiple install clicks, slow asynchronous checks,
-expired plans, version changes, text-only release notes, reopening the dialog,
-installation polling, reload, retry and both languages.
+1. **权威物理路径解析**：
+   - 更新器解析物理真实路径（`physical path`），严禁在更新日志和事务记录中混淆逻辑与物理路径；
+   - 插件根目录、备份目录与事务锁必须绑定至解析后的实体磁盘节点。
+2. **Windows 进程当前目录句柄释放 (`releaseRuntimeDirectory`)**：
+   - 在 Windows 环境下，Node.js / Electron 进程如果以 `assets/`、`compat/` 或 `sidecars/` 作为工作目录（CWD），Windows 内核将对该目录施加共享锁，导致原子重命名报 `EPERM / EACCES`；
+   - **强制行为**：在执行重命名前，必须调用 `releaseRuntimeDirectory(pluginDir)` 将进程 CWD 切换回上层根目录，释放目录占用句柄。
+3. **跨进程锁防重入铁律 (`update-lock.py`)**：
+   - 锁文件路径：`Path(target).parent / '.antigravity-pulse-update.lock'`；
+   - 严禁对软链接或重定向文件加锁（`linked(path) -> raise ValueError`）；
+   - **严禁删除锁文件 (Never Unlink)**：删除并重建已被锁定的 Inode 会放行第二个写入者，造成双写死锁；锁的释放只能通过文件描述符 `close` 触发内核自动释放。
 
-These tests do not represent macOS/Linux native acceptance or successful startup
-of an arbitrary future Release. Version 0.8.7 includes this App-only updater;
-installation and recovery tests use controlled packages and interruption points.
+---
+
+## 4. 故障矩阵与错误码映射表 (Fault Recovery Matrix)
+
+| 故障类别 (`code`) | 详细原因 (`detail`) | 侦测机制 | 强制处置动作 |
+| :--- | :--- | :--- | :--- |
+| **`python`** | `python-missing` / `python-version` | 启动前探测探针，需 Python $\ge 3.10$ | 阻断流程，提示安装或升级 Python 运行时 |
+| **`network`** | `timeout` / `dns` / `proxy` / `http` | 下载过程中 Socket 异常或 HTTP 4xx/5xx | 保持旧版本不动，提示网络重试，不污染磁盘 |
+| **`busy`** | `permission` / 锁冲突 | `lifecycle_lock` 抛出 `FileExistsError` | 立即退出，避免与正在运行的安装/卸载冲突 |
+| **`verification`**| 哈希不匹配 | SHA-256 比对失败 | 删除损坏的 staging 临时文件，终止更新 |
+| **`location`** | `install-location` | 检测到受控目录下包含非法软链接嵌套 | 拒绝更新，保护用户数据不被非受控篡改 |
+
+---
+
+## 5. 机械化断言与测试防线 (Verification Contract)
+
+* **关联自动化测试套件**：
+  - [`tests/test_update_junctions.py`](file:///Users/yemou/Documents/extentions/antigrative-dashboard/tests/test_update_junctions.py)（Windows NTFS 联接与物理路径解析测试）
+  - [`tests/test_update_files.py`](file:///Users/yemou/Documents/extentions/antigrative-dashboard/tests/test_update_files.py)（文件原子重命名与替换测试）
+  - [`tests/test_update_network.py`](file:///Users/yemou/Documents/extentions/antigrative-dashboard/tests/test_update_network.py)（网络超时与代理故障降级测试）
+  - [`tests/test_update_worker.py`](file:///Users/yemou/Documents/extentions/antigrative-dashboard/tests/test_update_worker.py)（Worker 进程间通信与异常阻断测试）
+* **核心活体防倒退反向断言**：
+  1. `junction target resolution identifies physical destination correctly`（精准识别 NTFS 联接物理目标）；
+  2. `releasing runtime directory unblocks directory rename on Windows`（释放工作目录句柄彻底消除 EPERM）；
+  3. `corrupted download triggers immediate verification abort without touching runtime`（损坏包物理阻断）；
+  4. `active lock strictly rejects second concurrent updater process`（并发更新双写绝对互斥）。

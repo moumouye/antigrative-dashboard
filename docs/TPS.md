@@ -1,43 +1,88 @@
-# TPS timing quality
+# 生成速率与耗时模型硬指标规范 (TPS & Timing Quality Spec)
 
-Desktop and IDE share the same calculation. Eligible response tokens are summed
-and divided by the sum of their streaming durations. TTFT is separate; it is
-never added to the TPS denominator. No speed ceiling or synthetic duration is used.
+本文档定义 Antigravity Pulse（Desktop 与 IDE）共用的 Token 生成速率（TPS）计算模型、耗时测量准则与离群值隔离法则。
+代码实现（`sidecars/panel/metrics.mjs` 与 `sidecars/panel/rate-quality.mjs`）必须严格遵循本文档规定的代数模型，严禁用主观自然语言散文臆测修改。
 
-## Quarantined rates
+---
 
-- Invalid/inconsistent output token scopes, or conflicting duplicate request records.
-- Multiple attempt usage records with differing token counts, when the API supplies
-  only one request timing summary. A single `retryInfos` item is not a retry.
-- Tool-only planner output with a stream under 1 second, TTFT at least 2 seconds,
-  and TTFT at least 20 times the streaming duration. This is a conservative
-  summary-only heuristic, not proof of buffering. Tool-only association requires
-  the generator's step indices; no association is inferred from neighboring steps.
-- Short samples above `max(8 × median, median + 12 × MAD)` of at least five
-  otherwise eligible samples lasting at least 1 second from the same model,
-  provider and token basis. Different models never supply the baseline.
-- Nonfinite calculated rates.
+## 1. 业务目标与代数不变量 (Context & Invariants)
 
-Ordinary short text samples remain eligible and are flagged. Sustained high rates
-remain eligible, even when above the baseline; they receive a warning. Thresholds
-are deliberately conservative policy and may need real-world tuning.
-No chunk timeline is exposed by the current Antigravity API, so the DSH `dt`
-detector cannot be reproduced and actual server generation time cannot be recovered.
+* **领域核心目标**：提供可信、无缓冲污染的实时 Token 生成速率（Tokens Per Second）度量；
+* **物理与代数不变量 (Invariants)**：
+  1. **首字时延物理剥离**：首字时间（TTFT, Time To First Token）严格独立测量，$\Delta t_{\text{TTFT}} \notin \Delta t_{\text{stream}}$，绝对不可计入 TPS 流式生成时间分母；
+  2. **零合成时延与零速度硬上限**：严禁人为硬编码最大速率上限（如 200 tps），严禁伪造时延常数；
+  3. **数据隐私绝对红线**：持久化速率记录时，仅存储数值聚合指标与枚举错误码，严禁存储任何对话 Prompt、响应正文或原始轨迹片段。
 
-## Display and persistence
+---
 
-An unreliable latest request shows **Timing uncertain / 计时异常**, never the prior
-request's rate. The UI keeps only the calculation basis; exclusion counts and
-reasons remain numeric diagnostic metadata and are explained in the README. Tokens,
-cache, context and TTFT are retained. If no eligible samples exist, TPS is unknown.
+## 2. 数学计算模型与滤波法则 (Mathematical Grounding)
 
-Old saved rates are masked until the full trajectory can be read and recalculated.
-Other saved usage survives. Full coverage recalculations replace prior rates even
-if fewer samples now qualify. Partial or regressing host responses do not replace
-the saved full coverage snapshot. Only numeric aggregates and fixed reason codes
-are saved; no prompts, output/tool arguments, request identifiers or raw trajectory
-are added to persisted statistics.
+### 2.1 流式生成速率基础公式 (Base TPS Formula)
 
-References: DSH discussions
-[7960](https://github.com/deepseek-ai/deepseek-harness/discussions/7960) and
-[6129](https://github.com/deepseek-ai/deepseek-harness/discussions/6129).
+对于单次或多次合并请求，流式生成速率定义为有效输出 Token 数量与流式持续时间的商：
+
+$$\text{TPS} = \begin{cases} \dfrac{\sum T_{\text{out}}}{\Delta t_{\text{stream}}}, & \Delta t_{\text{stream}} > 0 \\ \text{null}, & \Delta t_{\text{stream}} \le 0 \end{cases}$$
+
+当存在多个并发流或重叠时间片时，采用一维时间区间并集测度计算实际流式总耗时：
+
+$$\Delta t_{\text{stream}} = \frac{1}{1000} \cdot \mu\left(\bigcup_{k} [t_{k,\text{start}}, t_{k,\text{end}}]\right)$$
+
+### 2.2 离群值基准池与 MAD 滤波 (Median & MAD Outlier Filter)
+
+为防止短时缓冲区冲刷（Buffer Flush）导致虚假极高速率，系统维护同模型画像（Same Model Profile: 模型名 + 供应商 + Token 统计口径）基准池：
+
+1. **有效基准样本池条件**：
+   $$\mathcal{P}_{\text{base}} = \left\{ \text{tps}_i \;\middle|\; \text{reasons}_i = \emptyset \;\land\; \Delta t_i \ge 1.0\text{ s} \;\land\; \text{tps}_i > 0 \right\}$$
+2. **中位数基准 ($\tilde{X}$)**：
+   $$\tilde{X} = \text{median}(\mathcal{P}_{\text{base}})$$
+3. **中位数绝对偏差 (MAD)**：
+   $$\text{MAD} = \text{median}\left( \left\{ |\text{tps}_i - \tilde{X}| \;\middle|\; \text{tps}_i \in \mathcal{P}_{\text{base}} \right\} \right)$$
+4. **动态隔离阈值上限 ($\text{Limit}_{\text{quarantine}}$)**（要求 $|\mathcal{P}_{\text{base}}| \ge 5$）：
+   $$\text{Limit}_{\text{quarantine}} = \max\left( 8 \cdot \tilde{X}, \; \tilde{X} + 12 \cdot \text{MAD} \right)$$
+
+### 2.3 异常样本判定与隔离守卫 (Quarantine Guard Conditions)
+
+任何样本若命中以下守卫条件，立即标记为隔离异常（Unreliable），禁止进入有效速率呈现：
+
+| 异常判定项 | 触发判定代数守卫条件 (Guard Assertion) | 记录原因码 (Reason Code) |
+| :--- | :--- | :--- |
+| **短样本离群冲刷** | $\Delta t < 1.0\text{ s} \;\land\; \text{TPS} > \text{Limit}_{\text{quarantine}} \;\land\; |\mathcal{P}_{\text{base}}| \ge 5$ | `short-outlier` |
+| **工具调用缓冲疑似** | $0 < \Delta t < 1.0\text{ s} \;\land\; T_{\text{out}} > 0 \;\land\; \text{isToolOnly} \;\land\; \Delta t_{\text{TTFT}} \ge 2.0\text{ s} \;\land\; \dfrac{\Delta t_{\text{TTFT}}}{\Delta t} \ge 20$ | `short-tool-window` |
+| **非有限速率数值** | $\neg\text{Number.isFinite}(\text{TPS}) \;\land\; \Delta t > 0 \;\land\; T_{\text{out}} \ne \text{null}$ | `nonfinite-rate` |
+| **Token 作用域非法** | 上下文作用域不一致或响应标记冲突 | `token-scope` |
+| **重复请求记录冲突** | 相同 Request ID 出现互斥数值记录 | `duplicate-scope` |
+| **重试计费记录冲突** | 单次请求包含多条不同计费统计的 `retryInfos` | `retry-scope` |
+
+> [!NOTE]
+> **真实高生成率保护原则**：持续时长 $\Delta t \ge 1.0\text{ s}$ 的样本，即使其速率超过 $\text{Limit}_{\text{quarantine}}$，也**绝不**判定为 `short-outlier`（保留真实模型输出极速）。
+
+---
+
+## 3. 诊断代码与界面呈现矩阵 (Reason Codes & Display Matrix)
+
+| 状态标识 (Status) | 判定守卫条件 | 界面显示文本 (UI Display) | 数据持久化与统计行为 |
+| :--- | :--- | :--- | :--- |
+| **`ok`** | `reasons.length == 0 && responseTokens !== null && duration > 0` | 正常数值 (例: `84.5 tps`) | 写入本地持久化统计快照 |
+| **`unreliable`** | 命中任意 `RATE_REASONS` | **Timing uncertain / 计时异常** | 记录原因码；遮蔽历史速率；保留 Token/TTFT/Context |
+| **`missing`** | `responseTokens === null \|\| duration <= 0` | 占位横线 (`—`) | 不计入速率聚合；保持未知状态 |
+
+---
+
+## 4. 物理存储与私有边界 (Persistence & Boundaries)
+
+1. **旧快照遮蔽与全量重算**：当速率算法升级（`RATE_VERSION = 2`）时，历史保存的速率值被遮蔽，直至重新读取完整轨迹全量重算；
+2. **全覆盖替换契约**：全覆盖（Full Coverage）重算快照具有最高优先级，宿主部分退化或不完整的临时响应不得覆盖全覆盖历史；
+3. **隐私绝对物理隔离**：仅保存数值聚合结果（`tokens`, `ttft`, `duration`, `tps`）与不可变枚举错误码，严禁将 Prompt 词、用户数据持久化至本地 SQLite 或 JSON 账本中。
+
+---
+
+## 5. 机械化断言与测试防线 (Verification Contract)
+
+* **关联自动化测试套件**：
+  - [`sidecars/panel/tests/rate-quality.test.mjs`](file:///Users/yemou/Documents/extentions/antigrative-dashboard/sidecars/panel/tests/rate-quality.test.mjs)
+  - [`sidecars/panel/tests/metrics.test.mjs`](file:///Users/yemou/Documents/extentions/antigrative-dashboard/sidecars/panel/tests/metrics.test.mjs)
+* **核心活体防倒退反向断言**：
+  1. `single retryInfos item is not treated as a retry scope conflict`（单次重试信息不误判冲突）；
+  2. `sustained high rate (>= 1s) is not quarantined by MAD filter`（持续高生成率绝对不受 MAD 误杀）；
+  3. `tool-only short stream with high TTFT/stream ratio is strictly quarantined`（短流高比值工具调用强制隔离）；
+  4. `different model profiles never pollute baseline median`（异构模型间基准池物理隔离）。
