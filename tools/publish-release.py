@@ -125,6 +125,31 @@ def publish(client, tag, commit, notes, assets=None):
     return result.get('html_url')
 
 
+def extract_release_notes(root: Path, tag: str) -> str:
+    release_file = root / 'GITHUB_RELEASE.md'
+    if release_file.exists() and release_file.stat().st_size > 0:
+        return release_file.read_text(encoding='utf-8').strip()
+    changelog_file = root / 'CHANGELOG.md'
+    if changelog_file.exists():
+        version = tag.lstrip('v')
+        lines = changelog_file.read_text(encoding='utf-8').splitlines()
+        collecting = False
+        notes = []
+        for line in lines:
+            if line.startswith('## '):
+                if line.startswith(f'## {version}'):
+                    collecting = True
+                    continue
+                elif collecting:
+                    break
+            elif collecting:
+                notes.append(line)
+        body = '\n'.join(notes).strip()
+        if body:
+            return f"# Antigravity Pulse {tag}\n\n{body}"
+    return f"# Antigravity Pulse {tag}"
+
+
 if __name__ == '__main__':
     import sys
     root = Path(__file__).resolve().parents[1]
@@ -132,4 +157,5 @@ if __name__ == '__main__':
     text_only = '--text-only' in sys.argv or os.environ.get('RELEASE_TEXT_ONLY') == '1'
     assets = [] if text_only else checked_assets(root, tag)
     client = GitHub(os.environ['GITHUB_REPOSITORY'], os.environ['GH_TOKEN'])
-    print(publish(client, tag, os.environ['GITHUB_SHA'], (root / 'GITHUB_RELEASE.md').read_text(encoding='utf-8'), assets))
+    body = extract_release_notes(root, tag)
+    print(publish(client, tag, os.environ['GITHUB_SHA'], body, assets))
