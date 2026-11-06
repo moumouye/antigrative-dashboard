@@ -1,84 +1,50 @@
-# 边界
+# ① 边界与红线 (Boundaries & Constraints)
 
-本文件回答唯一问题：**这处改动会让我以后每次跟上游合并时付出多少代价。**
+本文档定义本项目的系统架构物理红线、模块职责划分与不可逾越的技术边界。
 
-## 分区判定
+---
 
-上游改动频次决定冲突成本。重算命令（每次上游发版后执行一次）：
+## 1. 核心架构红线 (Non-negotiable Architectural Invariants)
 
-```bash
-git log upstream/main -60 --name-only --format='COMMIT' \
- | python3 -c "import sys,collections;c=collections.Counter(l.strip() for l in sys.stdin if l.strip() and l.strip()!='COMMIT');[print(f'{n:3d}  {f}') for f,n in c.most_common(30)]"
-```
+系统在任何功能演进与重构中，必须无条件遵守以下物理红线：
 
-`churn` = 上游最近 60 个提交中触碰该文件的次数。
+### ① 宿主完整性保护红线 (Host Non-Invasive Invariant)
+* **严禁篡改 `app.asar`**：严禁解包、修补或覆盖 Electron 宿主程序的 `resources/app.asar` 核心归档。所有能力增强必须通过运行时加载器（`compat/runtime-ui.mjs`）或 VS Code 插件协议进行非破坏性挂载；
+* **卸载与禁用自愈性**：移除插件或停用 sidecar 时，宿主环境必须能够即刻回退至纯净基线状态，不得在宿主目录残留破损配置或使宿主进程陷入启动崩溃。
 
-| 分区 | 阈值 | 含义 |
-| :--- | :--- | :--- |
-| 禁改区 | churn ≥ 10 | 每次上游发版都可能手解冲突，改一行付一次代价 |
-| 覆盖区 | churn 1–9 | 可改，但本地触点必须压到最小行数 |
-| 自建区 | churn 0 | 上游不存在的文件，冲突率恒为零 |
+### ② 数据隐私与离线零外流红线 (Data Privacy & Zero Egress)
+* **零外部遥测与数据外泄**：所有的 Token 统计、耗时指标、会话元数据与轨迹分析，数据生产、计算与消费物理链路 100% 局限于本地设备；
+* **本地回环网络隔离**：本地服务通信（IPC / HTTP Bridge）严格绑定 `127.0.0.1`，严禁监听 `0.0.0.0`，严禁在公网暴露任何控制端点；
+* **计费引擎离线计算**：价格表（`sidecars/panel/pricing.mjs`）为纯静态硬编码字典，人民币与美元成本估算纯本地完成，严禁发起外部汇率或价格网络请求；
+* **凭据与正文隔离**：用量分析仅提取数值元数据（Prompt Tokens、Completion Tokens、Model Name），严禁收集、解析或向磁盘持久化任何用户对话正文、Prompt 提示词或敏感认证密钥。
 
-## 当前分区表
+### ③ 零依赖与极简构建红线 (Zero External Dependencies)
+* **零生产环境 npm 依赖**：生产运行态不依赖 `node_modules`，不引入外部构建器（Webpack、Vite、Rollup）。运行时使用原生 Node.js ESM (`.mjs`) 与 Webview 专用的 CommonJS (`.cjs`)；
+* **零外部 pip 依赖**：安装引导器（`install.py`）、打包工具（`manage.py`）及发布工具（`tools/publish-release.py`）必须仅使用 Python 3 标准库（`urllib`, `json`, `zipfile`, `shutil`, `sys`, `os`），确保在任何全新机器上开箱即跑；
+* **不引入 TypeScript 编译链至运行时**：严禁将运行时源文件重命名为 `.ts` 并引入构建产物（详见 AP-001）。类型安全性统一依托 `// @ts-check` + JSDoc 类型注释。
 
-基线：2026-11-02，`upstream/main` @ `b1ad237`（v0.8.18）。
+### ④ 持久化安全与幂等归档红线 (Storage Safety & Idempotent Migration)
+* **设备级统一账本**：用量数据按设备全局作用域唯一落盘于 `~/.gemini/antigravity/usage/`；
+* **历史数据零删除原则**：在对旧版多账户分散目录执行收敛迁移时，严禁使用物理删除（`rm -rf`）；必须将旧目录原子移动至 `.merged-<uuid>/` 备份归档目录，确保极端故障下数据可恢复。
 
-| 文件 | churn | 分区 | 本地当前触点 |
-| :--- | ---: | :--- | :--- |
-| `CHANGELOG.md` | 26 | 禁改 | 曾追加 11 行 → 改记 [`LOCAL_CHANGES.md`](LOCAL_CHANGES.md) |
-| `README.md` / `README.zh-CN.md` | 26 | 禁改 | 2 行 |
-| `GITHUB_RELEASE.md` | 24 | 禁改 | 无 |
-| `package.json` | 20 | 禁改 | 3/1 行，仅版本号，见 [`contracts.md`](contracts.md) |
-| `plugin.json` / `ide/package.json` | 17 | 禁改 | 各 1 行，仅版本号 |
-| `compat/inline-widget.cjs` | 16 | 禁改 | 14/6 行（待迁出） |
-| `COMPATIBILITY.md` | 14 | 禁改 | 无 |
-| `docs/UPDATES.md` | 14 | 禁改 | 无 |
-| `compat/i18n.cjs` | 13 | 禁改 | 无 |
-| `ide/README.md` | 13 | 禁改 | 无 |
-| `compat/usage-ui.cjs` | 10 | 禁改 | **0 行**（自研实现已迁出，见下行） |
-| `sidecars/panel/usage.mjs` | 10 | 禁改 | 112/41 行（账本内核，需保留） |
-| `sidecars/panel/app.js` | 12 | 禁改 | 无 |
-| `ide/main.mjs` | 8 | 覆盖区 | 3 行；注入点入口，见 [`contracts.md`](contracts.md) |
-| `sidecars/panel/main.mjs` | 10 | 禁改 | 1 行；App 注入点，改指解析器 |
-| `tools/check-usage-ui.mjs` | 2 | 覆盖区 | 53 行 |
-| `tools/check-cold-start-ui.mjs` | 2 | 覆盖区 | 1 行（视图路径） |
-| `tools/check-teamwork-ui.mjs` | 0 | 覆盖区 | 1 行（视图路径） |
-| `tools/check-collection-state-ui.mjs` | 1 | 覆盖区 | 1 行（视图路径） |
-| `tools/check-widget-lifecycle.mjs` | 1 | 覆盖区 | 1 行（视图路径） |
-| `tools/check-usage-performance.mjs` | 1 | 覆盖区 | 2 行（改用解析器） |
-| `tools/check-sidebar-subagent-ui.mjs` | 1 | 覆盖区 | 6 行（改用解析器） |
-| `tools/render-readme-assets.mjs` | 0 | 覆盖区 | 7 行（改用解析器） |
-| `sidecars/panel/usage-disk-worker.mjs` | 1 | 覆盖区 | 26/5 行 |
-| `sidecars/panel/pricing.mjs` | 0 | 自建 | 新增 277 行 |
-| `compat/usage-ui.local.cjs` | 0 | 自建 | 新增 1102 行（自研用量视图） |
-| `compat/usage-view.mjs` | 0 | 自建 | 视图路径唯一解析处，含回退 |
-| `tools/check-usage-ui-cdp.mjs` | 0 | 自建 | 新增 149 行 |
-| `tools/reload-live-ui.mjs` | 0 | 自建 | 新增 49 行 |
-| `tools/local-gate.mjs` | 0 | 自建 | 门禁入口 |
-| `docs/boundaries.md` 等小写文档 | 0 | 自建 | 本地真理库 |
+---
 
-`sidecars/panel/usage.mjs` 处于禁改区但有 112 行本地改动，这是本仓库既成事实。它承载统一账本内核，无迁出路径，只能接受每次上游触碰时手解。触碰该文件前先在 [`LOCAL_CHANGES.md`](LOCAL_CHANGES.md) 找到对应改动目的。
+## 2. 模块职责与技术栈边界 (Module Responsibilities)
 
-## 上游漂移边界
+| 模块层级 | 物理路径 | 运行环境 / 技术栈 | 职责边界（只准做什么，严禁做什么） |
+| :--- | :--- | :--- | :--- |
+| **安装与引导器** | `install.py`, `install.ps1` | Python 3 标准库 / PowerShell 原生 | **准**：跨平台单行安装、下载 Release 归档、校验解压、创建软链/快捷方式。<br/>**严禁**：安装 pip/npm 依赖、修改系统全局变量。 |
+| **运行时注入层** | `compat/runtime-ui.mjs`, `compat/inline-widget.cjs` | Node.js ESM / CJS (宿主渲染环境) | **准**：向宿主注入 Shadow DOM 挂载点、分发全局事件、提供页面加载入口。<br/>**严禁**：直接修改宿主原生 DOM 树根节点、阻塞主线程渲染。 |
+| **用量看板视图** | `compat/usage-ui.local.cjs`, `compat/usage-view.mjs` | 原生 DOM API / CJS 模块源码文本 | **准**：渲染 24 小时日内图表、Token 筛选、费用计算、多语言呈现。<br/>**严禁**：直接进行磁盘 I/O 操作；数据必须统一从 Sidecar 获取。 |
+| **本地服务进程** | `sidecars/panel/main.mjs`, `sidecars/panel/usage.mjs` | Node.js ESM 原生进程 | **准**：监听 Loopback IPC、聚合统计账本、管理会话历史、调度后台写入。<br/>**严禁**：跨主机网络通信、明文记录敏感 Prompt。 |
+| **异步落盘 Worker** | `sidecars/panel/usage-disk-worker.mjs` | Node.js Worker 线程 / 子进程 | **准**：批量缓冲、单向追加写入 JSONL 账本文件。<br/>**严禁**：与 UI 线程产生同步阻塞式调用。 |
+| **IDE 适配层** | `ide/main.mjs`, `ide/surface.cjs` | VS Code Extension API | **准**：为 VS Code/IDE 宿主注入相同规范的用量视图工厂。<br/>**严禁**：绕过 `usage-view.mjs` 解析器直接硬编码私有文件路径。 |
+| **治理与门禁工具** | `tools/local-gate.mjs`, `tools/check-*.mjs` | Node.js ESM 原生 (系统 Chrome CDP) | **准**：零依赖运行自动化门禁、执行物理不变量断言。<br/>**严禁**：为门禁引入笨重的外部无头测试驱动（如安装整个 Playwright 运行时作为硬性前提）。 |
 
-上游 2026-10-21 至 11-01 六天内发布 v0.8.10 至 v0.8.17 共八个版本。任何"一次改造到位"的结构性变更都会在下一次发版时失效。因此：
+---
 
-- 本地改动一律以**新增文件**为首选形态，修改上游文件为次选，重命名或重排目录为禁止形态；
-- 上游更新走 `git fetch upstream` + 逐条 `cherry-pick`，不执行 `git merge upstream/main`；
-- `upstream` 已设 `pushurl=no_push`，写入通道物理封死。
+## 3. 架构硬禁区 (Architectural Anti-Patterns Checklist)
 
-## 数据边界
-
-上游已完整描述数据边界（账户凭据、会话正文、轨迹落盘、SDK 兼容目录），见 [`docs/DEVELOPMENT.md`](DEVELOPMENT.md) 的「数据边界」一节。本节不复制其内容。
-
-本地增量约束只有一条：新增的统计与定价能力（`pricing.mjs`）只读上游已提供的数值元数据，不落盘任何会话正文，不引入外部网络请求——价格表为本地静态数据。
-
-## 硬禁区
-
-- **JS 改 TS**：122 个 `.mjs` 全部重命名，冲突类型变为最难解的 rename/modify；且本仓库无构建链、打包白名单按文件名硬列举。类型收益走 `// @ts-check` + JSDoc，见 [`anti-patterns.md`](anti-patterns.md) AP-001。
-- **目录重排**：`sidecars/`、`compat/`、`ide/`、`tools/`、`tests/` 的层次是上游测试 glob、打包白名单和 CI 的共同前提，移动任一路径会同时打断三处。
-- **平行体系**：本地测试、门禁、文档不得另立第二套目录或第二份真相，见 AP-003。
-
-## 复核触发条件
-
-上游发版、`docs/DEVELOPMENT.md` 被改写、本地新增文件进入 `tools/` 或 `compat/` 时，重新执行本页判定命令并覆盖本表。
+1. **严禁全树 JS 改 TS**：打断打包白名单、破坏运行时文本直读、增加构建黑盒（见 [`docs/anti-patterns.md`](anti-patterns.md) AP-001）；
+2. **严禁目录重排或文件随意重命名**：文件路径被测试 glob、打包清单、CI 流程与运行时动态加载硬编码约束，任意重命名将打断三处以上链路；
+3. **严禁建立平行体系**：严禁新增 `tests-local/`、`docs-local/`、`scripts-dev/` 等平行目录。所有测试进入既有标准 glob，所有门禁接入 `tools/local-gate.mjs`，所有文档受控收敛于 `docs/`（见 AP-003）。

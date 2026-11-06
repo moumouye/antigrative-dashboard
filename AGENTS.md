@@ -18,7 +18,7 @@ node tools/local-gate.mjs --list        # 当前门禁计划
 git status                              # 检查当前分支与未提交改动
 ```
 
-判断改动落在哪个分区：`docs/boundaries.md` 的分区表。禁改区文件（`package.json`、`plugin.json`、`CHANGELOG.md`、`compat/inline-widget.cjs`、`compat/usage-ui.cjs` 等）每次触碰都要记录动机。
+查阅 `docs/boundaries.md` 确认改动是否触碰物理红线与模块职责。核心文件（`package.json`、`plugin.json`、`compat/inline-widget.cjs` 等）每次触碰都要记录动机。
 
 ## 收工前
 
@@ -26,7 +26,7 @@ git status                              # 检查当前分支与未提交改动
 node tools/local-gate.mjs               # 零依赖全量，约 34s
 ```
 
-失败即停，修完再提交。修复缺陷时同步补反向断言，否则该缺陷会在下次上游同步时静默复活。
+失败即停，修完再提交。修复缺陷时同步补反向断言，杜绝同类问题二次逃逸。
 
 ## 提交
 
@@ -40,18 +40,16 @@ node tools/local-gate.mjs               # 零依赖全量，约 34s
 
 `type` 取 `feat` `fix` `refactor` `test` `docs` `chore`。一次提交只做一件事，不 `git add -A`。标题行沿用仓库既有风格，不加 emoji 前缀。
 
-向 `upstream` 提 PR 时改用上游的提交风格，不混用本文件的决策档案格式。`upstream` 已设 `pushurl=no_push`，本地改动不会误推。
-
 ## 文档
 
 | 想知道 | 读 |
 | :--- | :--- |
 | 系统结构与文档地图 | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
-| 这处改动会不会造成长期冲突 | [`docs/boundaries.md`](docs/boundaries.md) |
+| 模块职责与物理安全红线 | [`docs/boundaries.md`](docs/boundaries.md) |
 | 注入点、打包、版本、测试的接口约定 | [`docs/contracts.md`](docs/contracts.md) |
-| 已经否决过什么方案 | [`docs/anti-patterns.md`](docs/anti-patterns.md) |
+| 已经否决过什么方案与暗知识 | [`docs/anti-patterns.md`](docs/anti-patterns.md) |
 | 该跑哪些门禁、基线是多少 | [`docs/verification.md`](docs/verification.md) |
-| 本地为什么有这处改动 | [`docs/LOCAL_CHANGES.md`](docs/LOCAL_CHANGES.md) |
-| 上游怎么描述结构、测试、数据边界 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
+| 历史决策与架构演进里程碑 | [`docs/LOCAL_CHANGES.md`](docs/LOCAL_CHANGES.md) |
+| 基础目录结构、原生环境要求与核心测试规范 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
 
-本地真理库采用小写文件名，上游文档为全大写，用命名区分归属。真理库覆盖式维护，只反映当前实现，历史流水不复述。
+真理库覆盖式维护，只反映当前实现，历史流水不复述。

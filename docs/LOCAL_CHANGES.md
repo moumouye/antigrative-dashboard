@@ -1,45 +1,56 @@
-# 本地变更流水
+# 架构决策与版本里程碑流水 (Architectural Decision Records & Milestones)
 
-替代在上游 `CHANGELOG.md` 中追加条目的做法（理由见 [`anti-patterns.md`](anti-patterns.md) AP-004）。本文件只记录**相对 `upstream/main` 的增量**，上游自身的变更看 `CHANGELOG.md`。
+本文档记录本项目自主演进历程中的核心架构决策、技术改造与版本里程碑。
 
-## 2026-11-03 视图加载路径收口
+---
 
-| 范围 | 内容 | 提交 |
+## 2026-11-06 v0.8.19：主维护源确立、单脚本跨平台安装与纯文本发布
+
+| 架构范围 | 决策与改造内容 | 对应提交 |
 | :--- | :--- | :--- |
-| 加载 | 新增 `compat/usage-view.mjs` 作为视图文件唯一解析处：本地文件存在即用，缺失回退上游基线 | 本批 |
-| App | `sidecars/panel/main.mjs:43` 改走解析器。此前仍按名读 `compat/usage-ui.cjs`，重装后会加载已还原的上游简版 | 本批 |
-| 门禁 | `check-usage-performance`、`check-sidebar-subagent-ui`、`render-readme-assets` 三处改走解析器，此前同样指向旧文件 | 本批 |
-| 测试 | `entry-usage.test.mjs` 的模块桩补 `usage-view.mjs`，否则 VM 加载器拒绝未知导入 | 本批 |
+| **主维护源确立** | 原上游仓库删库失效后，将主源收拢至 `moumouye/antigrative-dashboard`。更新检查、安装器及发版脚本全面切换至主维护源。 | `e7d9a72` |
+| **极简安装引导** | 新增单文件零依赖 `install.py` 与 `install.ps1`，原生支持标准输入管道模式（`curl ... \| python3` / `irm ... \| iex`），提供 Release 资产与源码分支归档双级容灾下载。 | `e7d9a72` |
+| **纯文本发布支持** | 在 `tools/publish-release.py` 与 GitHub Actions 中引入 `--text-only` 模式，解耦版本状态日志广播与二进制资产强校验，消除了无附件发布时的崩溃风险。 | `f01b78c` |
+| **首页体验重构** | 首页默认呈现中文 README，将一键安装命令顶格展示；英文版独立归档为 `README.en.md` 并提供双向语言切换。 | `cbfbba3` `95fca87` |
+| **架构文档治理** | 全面执行 AI 原生软件工程规范（`/ai-native-se`），重塑四维真理库（`boundaries`, `contracts`, `anti-patterns`, `verification`）。 | 本批次 |
 
-## 2026-11-02 治理层
+---
 
-| 范围 | 内容 | 提交 |
+## 2026-11-03 视图加载路径收口与容灾
+
+| 架构范围 | 决策与改造内容 | 对应提交 |
 | :--- | :--- | :--- |
-| 文档 | 建立真理库 `docs/`（boundaries / contracts / anti-patterns / verification / LOCAL_CHANGES）与根索引 `ARCHITECTURE.md`、`AGENTS.md`，确立与上游文档的单向引用规则 | 本批 |
-| 门禁 | 新增 `tools/local-gate.mjs` 作为本地门禁唯一入口，`package.json` 收敛为稳定入口，此后新增门禁不再触碰上游高频文件 | 本批 |
-| 渲染 | 自研用量视图迁出 `compat/usage-ui.cjs`（1102 行）至新文件 `compat/usage-ui.local.cjs`，上游文件还原为原样 325 行；注入序列末尾追加覆盖项，本地触点从 1141 行降至 1 行 | 本批 |
+| **统一解析器** | 新增 `compat/usage-view.mjs` 作为全工程唯一视图路径解析处：自研文件存在即优先加载，缺失时自动优雅降级回退基线。 | `374bc73` |
+| **App 桌面端收敛** | `sidecars/panel/main.mjs:43` 改走统一解析器，修复此前写死旧文件名导致插件重装后回退至简版界面的隐患。 | `374bc73` |
+| **门禁与工具对齐** | `check-usage-performance`、`check-sidebar-subagent-ui`、`render-readme-assets` 等工具统一接入解析器，彻底消除多头寻址。 | `374bc73` |
 
-## 2026-11-02 统一账本与用量视图
+---
 
-| 范围 | 内容 | 提交 |
+## 2026-11-02 治理层初始化与视图解耦
+
+| 架构范围 | 决策与改造内容 | 对应提交 |
 | :--- | :--- | :--- |
-| 账本 | 采用上游 v0.8.18 内核，把分账号物理目录收敛为设备级统一账本；旧目录合并后归档至 `.merged-<uuid>/`，不删除 | `65ac77f` |
-| 测试 | 账本断言对齐设备级作用域 | `8ba0c08` |
-| 门禁 | 新增 `tools/check-usage-ui-cdp.mjs`，零依赖驱动系统 Chrome 校验用量视图 | `2742ca7` |
-| 视图 | 用量窗口收敛为双页签免滚动；表头静默；实时刷新保持 | `07b0c4f` `7a412c8` `34be25e` |
-| 行为 | 完整行不再误标；打开窗口不再触发导入 | `ecf7a90` |
-| 工具 | `tools/reload-live-ui.mjs` 经 CDP 热重载控件，免重启宿主 | `25f6ace` |
-| 定价 | 新增 `sidecars/panel/pricing.mjs`，静态价格表 + 人民币成本估算，仅读数值元数据 | `65ac77f` |
+| **真理库建设** | 建立 `docs/` 四维真理库与根索引 `ARCHITECTURE.md`，确立高信噪比技术文档规范与单向引用法则。 | `2742ca7` |
+| **门禁框架收敛** | 新增 `tools/local-gate.mjs` 作为门禁唯一入口，冻结 `package.json` 的 scripts 膨胀，避免修改核心清单配置。 | `2742ca7` |
+| **用量视图迁出** | 将自研用量看板完整剥离至 `compat/usage-ui.local.cjs`（1100+ 行），通过同名全局工厂覆盖注入，将宿主触点降至最低。 | `2742ca7` |
 
-## 2026-10-14 v0.8.7 增强基线
+---
 
-| 范围 | 内容 |
+## 2026-11-02 统一账本与离线计费引擎
+
+| 架构范围 | 决策与改造内容 | 对应提交 |
+| :--- | :--- | :--- |
+| **设备级账本** | 彻底收敛分账号多目录碎片，统一汇聚至设备全局账本；旧目录迁移后自动备份至 `.merged-<uuid>/`，实现零丢失平滑迁移。 | `65ac77f` |
+| **离线计费引擎** | 新增 `sidecars/panel/pricing.mjs`，内置静态价格字典，纯本地离线测算 Token 对应的人民币/美元开销，绝不发起外部网络请求。 | `65ac77f` |
+| **CDP 真实测试** | 新增 `tools/check-usage-ui-cdp.mjs`，零依赖直连系统 Chrome CDP 端口，端到端断言 Shadow DOM 渲染与控制台零报错。 | `2742ca7` |
+| **免重启热重载** | 新增 `tools/reload-live-ui.mjs`，通过 CDP 向运行中的宿主动态重新注入新版视图，极大提升看板调试效率。 | `25f6ace` |
+
+---
+
+## 2026-10-14 历史基线特性演进
+
+| 架构范围 | 决策与改造内容 |
 | :--- | :--- |
-| 图表 | 年度日历改为 24 小时日内活动图 + 日期切换胶囊；Y 轴刻度校准 |
-| 视图 | 默认进入活动总览页；周期锚点隔离与导航钳制，防月份漂移 |
-| 筛选 | token 组件筛选、并行布局、状态栏自动展开 |
-| 更新 | GitHub 发布自动检测与一键交互式更新 |
-| 定价 | 实时成本估算，用量表列重构 |
-| 修复 | 用量视图锚定当前日期，防同步死锁 |
-
-该批次共 10 个提交，落在 `main` 与 `feat/hourly-activity-and-component-filter`，是 `feat/v0.8.18-unified-usage` 的历史前身。上游 v0.8.8 之后自行实现了 24 小时图与统一账本，两条演进线在此汇合。
+| **24h 日内活动图** | 替换传统粗粒度日历视图，引入 24 小时高精度分布条状图与日期切换胶囊控件。 |
+| **组件级 Token 筛选** | 增加按 Input / Output / Cache 分离筛选功能，状态栏支持折叠与自适应布局。 |
+| **视图日期锚定** | 严格锚定当前查询周期，修复多轮同步导致的日期漂移与死锁问题。 |
