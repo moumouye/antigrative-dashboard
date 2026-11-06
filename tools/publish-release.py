@@ -127,5 +127,7 @@ if __name__ == '__main__':
     root = Path(__file__).resolve().parents[1]
     tag = os.environ['GITHUB_REF_NAME']
     assets = checked_assets(root, tag)
+    if (root / 'install.py').is_file():
+        assets.append(root / 'install.py')
     client = GitHub(os.environ['GITHUB_REPOSITORY'], os.environ['GH_TOKEN'])
     print(publish(client, tag, os.environ['GITHUB_SHA'], (root / 'GITHUB_RELEASE.md').read_text(encoding='utf-8'), assets))
