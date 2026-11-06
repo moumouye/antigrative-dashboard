@@ -20,7 +20,7 @@ const targets=await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
 const page=targets.find(t=>t.type==='page');
 if(!page)throw Error('No Antigravity page target on port '+port);
 
-const [i18n,theme,update,usage,inline]=await Promise.all(['i18n.cjs','theme.cjs','update-ui.cjs','usage-ui.local.cjs','inline-widget.cjs'].map(read));
+const [i18n,theme,update,usage,inline]=await Promise.all(['i18n.cjs','theme.cjs','update-ui.cjs','usage-ui.cjs','inline-widget.cjs'].map(read));
 const payload=`(()=>{
   try{window.__agPulseDispose&&window.__agPulseDispose();}catch(e){}
   window.__agPulseI18nFactory=(${extract(i18n)});

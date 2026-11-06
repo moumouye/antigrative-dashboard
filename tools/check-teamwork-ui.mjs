@@ -6,7 +6,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {trajectoryMetrics} from '../sidecars/panel/metrics.mjs';
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..');
-const files=await Promise.all(['i18n.cjs','theme.cjs','inline-widget.cjs','usage-ui.local.cjs'].map(f=>readFile(join(repo,'compat',f),'utf8')));
+const files=await Promise.all(['i18n.cjs','theme.cjs','inline-widget.cjs','usage-ui.cjs'].map(f=>readFile(join(repo,'compat',f),'utf8')));
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
 const factories=`window.__agPulseI18nFactory=(${extract(files[0])});window.__agPulseThemeFactory=(${extract(files[1])});window.__agPulseUsageFactory=(${extract(files[3])});`;
 const install=`${factories}(${extract(files[2])})();`;

@@ -35,7 +35,7 @@
 | :--- | :--- | :--- | :--- |
 | **安装与引导器** | `install.py`, `install.ps1` | Python 3 标准库 / PowerShell 原生 | **准**：跨平台单行安装、下载 Release 归档、校验解压、创建软链/快捷方式。<br/>**严禁**：安装 pip/npm 依赖、修改系统全局变量。 |
 | **运行时注入层** | `compat/runtime-ui.mjs`, `compat/inline-widget.cjs` | Node.js ESM / CJS (宿主渲染环境) | **准**：向宿主注入 Shadow DOM 挂载点、分发全局事件、提供页面加载入口。<br/>**严禁**：直接修改宿主原生 DOM 树根节点、阻塞主线程渲染。 |
-| **用量看板视图** | `compat/usage-ui.local.cjs`, `compat/usage-view.mjs` | 原生 DOM API / CJS 模块源码文本 | **准**：渲染 24 小时日内图表、Token 筛选、费用计算、多语言呈现。<br/>**严禁**：直接进行磁盘 I/O 操作；数据必须统一从 Sidecar 获取。 |
+| **用量看板视图** | `compat/usage-ui.cjs`, `compat/usage-view.mjs` | 原生 DOM API / CJS 模块源码文本 | **准**：渲染 24 小时日内图表、Token 筛选、费用计算、多语言呈现。<br/>**严禁**：直接进行磁盘 I/O 操作；数据必须统一从 Sidecar 获取。 |
 | **本地服务进程** | `sidecars/panel/main.mjs`, `sidecars/panel/usage.mjs` | Node.js ESM 原生进程 | **准**：监听 Loopback IPC、聚合统计账本、管理会话历史、调度后台写入。<br/>**严禁**：跨主机网络通信、明文记录敏感 Prompt。 |
 | **异步落盘 Worker** | `sidecars/panel/usage-disk-worker.mjs` | Node.js Worker 线程 / 子进程 | **准**：批量缓冲、单向追加写入 JSONL 账本文件。<br/>**严禁**：与 UI 线程产生同步阻塞式调用。 |
 | **IDE 适配层** | `ide/main.mjs`, `ide/surface.cjs` | VS Code Extension API | **准**：为 VS Code/IDE 宿主注入相同规范的用量视图工厂。<br/>**严禁**：绕过 `usage-view.mjs` 解析器直接硬编码私有文件路径。 |

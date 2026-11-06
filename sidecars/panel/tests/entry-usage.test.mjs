@@ -26,7 +26,7 @@ async function entryFixture(host,url,selection=false){
     'store.mjs':{MetricsStore:Store},'usage.mjs':{DesktopUsage:Usage,UsageLedger:class{}},
     'sdk.mjs':{loadSidecarSdk:async()=>({SidecarApp:App,Response:class{}})},
     'runtime-ui.mjs':{RuntimeUi:Ui,makeRendererSource:()=>''},
-    'usage-view.mjs':{usageViewPath:()=>'/fixture/compat/usage-ui.local.cjs',usageViewExpression:()=>'(function(){})'},
+    'usage-view.mjs':{usageViewPath:()=>'/fixture/compat/usage-ui.cjs',usageViewExpression:()=>'(function(){})'},
     'platform.mjs':{platformPaths:()=>({data:'fixture',settings:'settings.json'})},
     'preferences.mjs':{PreferencesStore:class{async snapshot(){return {};}}},
     'sidecar-owner.mjs':{SidecarOwner:Owner},'host-theme.mjs':{readHostTheme:async()=>({})},

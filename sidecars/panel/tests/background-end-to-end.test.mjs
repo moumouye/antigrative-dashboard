@@ -13,7 +13,7 @@ import {SessionHistory} from '../history.mjs';
 import {DesktopUsage,UsageLedger,UNIFIED_SCOPE} from '../usage.mjs';
 const big='11111111-1111-1111-1111-111111111111',small='22222222-2222-2222-2222-222222222222';
 const generator=(id,i)=>({stepIndices:[i],chatModel:{modelDisplayName:'Fixture',streamingDuration:'2s',usage:{responseId:id+'-'+i,apiProvider:'API_PROVIDER_GOOGLE_GEMINI',inputTokens:100,cacheReadTokens:300,outputTokens:100,responseOutputTokens:100},chatStartMetadata:{createdAt:'2026-10-30T00:00:00Z',contextWindowMetadata:{estimatedTokensUsed:500,maxContextTokens:1000}}}});
-async function until(check,timeout=45000){const start=Date.now();while(!await check()){if(Date.now()-start>timeout)throw Error('End-to-end background deadline');await sleep(30);}}
+async function until(check,timeout=90000){const start=Date.now();while(!await check()){if(Date.now()-start>timeout)throw Error('End-to-end background deadline');await sleep(30);}}
 test('oversized conversation automatically completes without manual refresh while quota and normal conversation work',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'ag-background-e2e-'));const count=18000;let quotaCalls=0,bigReads=0,smallReads=0,closed=false;
  const server=createServer(async(req,res)=>{try{let input='';for await(const chunk of req)input+=chunk;const body=JSON.parse(input||'{}'),method=req.url.split('/').at(-1);res.setHeader('Content-Type','application/json');

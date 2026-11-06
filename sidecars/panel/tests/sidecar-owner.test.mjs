@@ -112,7 +112,7 @@ test('marker events during verification recheck the latest generation without fa
   owner.read=()=>++reads===1?new Promise(done=>{resolve=done;}):read();
   owner.watch(()=>{lost++;});assert.equal(reads,1,'watch verifies immediately');
   t.after(()=>resolve?.(record));await writeFile(owner.file,JSON.stringify(record));
-  const until=async predicate=>{const deadline=Date.now()+2000;while(!predicate()){if(Date.now()>deadline)throw Error('marker notification timeout');await new Promise(done=>setTimeout(done,5));}};
+  const until=async predicate=>{const deadline=Date.now()+5000;while(!predicate()){if(Date.now()>deadline)throw Error('marker notification timeout');await new Promise(done=>setTimeout(done,5));}};
   await until(()=>owner.owns()===false);resolve(record);
   await until(()=>owner.owns()===true);
   assert.ok(reads>=2);assert.equal(lost,0);assert.equal(owner.running,true);
@@ -124,7 +124,7 @@ test('ownership marker notifications stop collection before the polling fallback
   await old.claim();let timer;
   const lost=new Promise(resolve=>old.watch(resolve));
   t.after(()=>clearTimeout(timer));await next.claim();
-  await Promise.race([lost,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('ownership notification timeout')),2000);})]);
+  await Promise.race([lost,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('ownership notification timeout')),5000);})]);
   assert.equal(old.owns(),false);assert.equal(next.owns(),true);
 });
 

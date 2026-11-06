@@ -4,7 +4,7 @@ import {createServer} from 'node:http';
 import {join,dirname} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
-const repo=join(dirname(fileURLToPath(import.meta.url)),'..'),files=['compat/i18n.cjs','compat/theme.cjs','compat/inline-widget.cjs','compat/usage-ui.local.cjs'];
+const repo=join(dirname(fileURLToPath(import.meta.url)),'..'),files=['compat/i18n.cjs','compat/theme.cjs','compat/inline-widget.cjs','compat/usage-ui.cjs'];
 const ide=process.argv.includes('--ide');
 const sources=await Promise.all(files.map(f=>readFile(join(repo,f),'utf8')));
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');

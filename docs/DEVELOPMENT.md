@@ -33,7 +33,7 @@ node sidecars/panel/main.mjs
 * `/toolbar-preview`：关联最近一次活跃会话。
 
 ### 宿主免重启热重载
-若宿主程序已在运行，修改 `compat/usage-ui.local.cjs` 后无需重启宿主 Electron 进程，直接在终端执行：
+若宿主程序已在运行，修改 `compat/usage-ui.cjs` 后无需重启宿主 Electron 进程，直接在终端执行：
 ```bash
 npm run ui:reload
 ```

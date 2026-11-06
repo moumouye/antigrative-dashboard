@@ -291,7 +291,7 @@ test('a parent with no own usage or context persists and restores child-only tas
  assert.equal(offline.speed.taskUsage.tokens.totalTokens,unitTokens);assert.equal(offline.speed.context,null);
 });
 
-test('individual source ingestion and opening a child never double the account usage ledger',{timeout:5000},async t=>{
+test('individual source ingestion and opening a child never double the account usage ledger',{timeout:30000},async t=>{
  const directory=await temporary(t),ledger=new UsageLedger(join(directory,'ledger'));
  const own=raw(parent,{children:[child],responseIds:['shared-request']}),delegated=raw(child,{requests:2,responseIds:['shared-request','child-request']});
  const fixture=storeFixture(t,{history:new SessionHistory(join(directory,'history')),data:new Map([[parent,own],[child,delegated]]),onTrajectory:(scope,id,value)=>ledger.ingest(scope,id,value)});

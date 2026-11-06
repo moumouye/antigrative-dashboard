@@ -29,7 +29,7 @@ def checked_assets(root, tag):
             raise ValueError('Packaged version differs')
         for required in ['ide/package.json', 'ide/manage.py', 'ide/package.py', 'ide/README.md']:
             archive.getinfo(prefix + required)
-        for required in ['compat/usage-ui.cjs', 'compat/usage-ui.local.cjs', 'sidecars/panel/rate-quality.mjs', 'sidecars/panel/usage.mjs', 'sidecars/panel/pricing.mjs']:
+        for required in ['compat/usage-ui.cjs', 'sidecars/panel/rate-quality.mjs', 'sidecars/panel/usage.mjs', 'sidecars/panel/pricing.mjs']:
             archive.getinfo(prefix + required)
         for required in LARGE_CONVERSATION_MODULES:
             archive.getinfo(prefix + required)
@@ -40,9 +40,9 @@ def checked_assets(root, tag):
         for required in ['delegation.mjs', 'task-usage.mjs', 'delegated-usage.mjs']:
             archive.getinfo(prefix + 'sidecars/panel/' + required)
         for required in ['compat/update-ui.cjs', 'compat/update-worker.py', 'compat/update-lock.py',
-                         'sidecars/panel/updater.mjs', 'sidecars/panel/local-conversations.mjs', 'docs/UPDATES.md']:
+                         'sidecars/panel/updater.mjs', 'sidecars/panel/local-conversations.mjs']:
             archive.getinfo(prefix + required)
-        for required in ['install.sh', 'uninstall.sh', 'install.ps1', 'install.py', 'compat/runtime-ui.mjs', 'compat/theme.cjs', 'compat/host-theme.mjs', 'compat/preferences.mjs', 'compat/sidecar-owner.mjs', 'sidecars/panel/context.mjs', 'cli/statusline.mjs', 'cli/metrics.mjs', 'cli/render.mjs', 'cli/lifecycle.py', 'docs/CLI.md', 'docs/assets/cli-conversation.png', 'docs/assets/cli-conversation-zh.png']:
+        for required in ['install.sh', 'uninstall.sh', 'install.ps1', 'install.py', 'compat/runtime-ui.mjs', 'compat/theme.cjs', 'compat/host-theme.mjs', 'compat/preferences.mjs', 'compat/sidecar-owner.mjs', 'sidecars/panel/context.mjs', 'cli/statusline.mjs', 'cli/metrics.mjs', 'cli/render.mjs', 'cli/lifecycle.py']:
             archive.getinfo(prefix + required)
     ide_version = json.loads((root / 'ide/package.json').read_text(encoding='utf-8'))['version']
     if ide_version != version:
@@ -59,7 +59,7 @@ def checked_assets(root, tag):
                      'extension/ide/surface.cjs', 'extension/ide/manage.py', 'extension/compat/inline-widget.cjs',
                      'extension/README.md', 'extension/LICENSE']:
             archive.getinfo(name)
-        for name in ['compat/usage-ui.cjs', 'compat/usage-ui.local.cjs', 'sidecars/panel/rate-quality.mjs', 'sidecars/panel/usage.mjs', 'sidecars/panel/pricing.mjs']:
+        for name in ['compat/usage-ui.cjs', 'sidecars/panel/rate-quality.mjs', 'sidecars/panel/usage.mjs', 'sidecars/panel/pricing.mjs']:
             archive.getinfo('extension/' + name)
         for name in LARGE_CONVERSATION_MODULES:
             archive.getinfo('extension/' + name)

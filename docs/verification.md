@@ -49,7 +49,7 @@ node tools/local-gate.mjs
 * **异步 Worker 写入稳态**：账本采用异步单向追加写入（JSONL），UI 线程不产生锁等待或重入颠簸。
 
 ### ③ 容灾与破坏性韧性 (Chaos & Disruption Resilience)
-* **视图加载容灾**：当首选的 `usage-ui.local.cjs` 文件物理缺失时，`usage-view.mjs` 必须平滑降级回退至 `usage-ui.cjs`，严禁宿主白屏崩溃；
+* **视图加载收口**：视图加载唯一由 `usage-view.mjs` 解析收口至 `usage-ui.cjs`，所有端侧（App / IDE / CDP 测试）统一引用单一真理源；
 * **安装下载容灾**：在线安装器拉取 GitHub Release 资产失败（如纯文本发布无资产时），必须自动降级拉取 `main.zip` 分支源码包完成安装。
 
 ### ④ 避坑活体防倒退锁 (Anti-Regression Living Locks)

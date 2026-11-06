@@ -14,7 +14,7 @@ flowchart LR
     Sidecar["本地守护进程<br/>(sidecars/panel/main.mjs)"]
     Worker["异步落盘 Worker<br/>(usage-disk-worker.mjs)"]
     Disk[("本地磁盘 JSONL 账本<br/>~/.gemini/.../usage/")]
-    Webview["渲染面板 (Shadow DOM)<br/>(compat/usage-ui.local.cjs)"]
+    Webview["渲染面板 (Shadow DOM)<br/>(compat/usage-ui.cjs)"]
 
     Host -->|IPC 消息通知| Sidecar
     Sidecar -->|批量缓冲队列| Worker
@@ -36,12 +36,8 @@ sequenceDiagram
     participant Resolver as compat/usage-view.mjs
     participant Webview as 渲染上下文 (Webview Window)
 
-    Host->>Resolver: 查询首选视图路径 usageViewPath()
-    alt 存在增强用量看板 (usage-ui.local.cjs)
-        Resolver-->>Host: 返回 compat/usage-ui.local.cjs
-    else 文件缺失
-        Resolver-->>Host: 降级回退基准视图 compat/usage-ui.cjs
-    end
+    Host->>Resolver: 查询权威视图路径 usageViewPath()
+    Resolver-->>Host: 返回 compat/usage-ui.cjs
     Host->>Host: 读取源码文本并提取工厂表达式 usageViewExpression(src)
     Host->>Webview: 执行字符串脚本注入
     Webview->>Webview: 赋值 window.__agPulseUsageFactory
@@ -54,8 +50,7 @@ sequenceDiagram
 ```js
 // compat/usage-view.mjs
 export function usageViewPath() {
-  const local = join(here, 'usage-ui.local.cjs');
-  return existsSync(local) ? local : join(here, 'usage-ui.cjs');
+  return join(here, 'usage-ui.cjs');
 }
 export function usageViewExpression(source) {
   // 提取 module.exports = 后的单个函数或类表达式文本
@@ -65,7 +60,7 @@ export function usageViewExpression(source) {
 ### 管道约束
 1. **导出单一性**：被注入的 `.cjs` 必须有且仅有一处 `module.exports = `，其后必须是单个匿名函数或类表达式；
 2. **全局命名空间隔离**：跨文件工厂通信严格遵循 `window.__agPulse*Factory` 命名空间约定；
-3. **双重注入与容灾覆盖**：IDE 管道先挂载基准视图、再覆盖增强看板（`usage-ui.local.cjs`），保证即使增强文件缺失也能平滑降级而非直接报错；
+3. **单轨注入收口**：App 与 IDE 管道统一接入 `compat/usage-ui.cjs`，彻底消除多文件版本分叉；
 4. **惰性消费**：UI 挂载点在宿主渲染准备就绪后惰性调用 `window.__agPulseUsageFactory({ root, language, ... })`，工厂晚于挂载点定义是安全的。
 
 ---

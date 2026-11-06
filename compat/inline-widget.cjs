@@ -239,7 +239,11 @@ module.exports = function installAgPulseInlineWidget() {
       if(!nativeComfortable())return false;
       if(composer.kind==='subagent'&&intersects(composer.anchor.getBoundingClientRect()))return false;
       for(const control of document.querySelectorAll('button,[role="button"],a[href],input,select,[contenteditable="true"]')){
-        if(node.contains(control)||(root&&root.contains(control))||composer.row.contains(control))continue;
+        if(node.contains(control)||(root&&root.contains(control)))continue;
+        if(composer.row.contains(control)){
+          const st=getComputedStyle(control),pst=control.parentElement?getComputedStyle(control.parentElement):null;
+          if((!st||st.position!=='absolute')&&(!pst||pst.position!=='absolute'))continue;
+        }
         const other=control.getBoundingClientRect();
         if(other.width<=0||other.height<=0||!intersects(other))continue;
         if(control.closest('[hidden],[inert]')||getComputedStyle(control).visibility==='hidden')continue;
