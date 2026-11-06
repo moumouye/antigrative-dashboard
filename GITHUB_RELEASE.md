@@ -18,8 +18,12 @@
 - **一键在线安装（推荐）**：
   - macOS / Linux：`curl -fsSL https://raw.githubusercontent.com/moumouye/antigrative-dashboard/main/install.py | python3`
   - Windows：`irm https://raw.githubusercontent.com/moumouye/antigrative-dashboard/main/install.ps1 | iex`
-- **桌面 App 手动安装**：下载 `antigrative-dashboard-0.8.19.zip` 解压后运行 `python manage.py install`（或运行 `install.py` / `install.ps1`）。
-- **独立 IDE**：下载 `antigrative-dashboard-ide-0.8.19.vsix` 并通过扩展菜单 **Install from VSIX…** 安装。
-- **CLI**：使用压缩包内安装器运行 `python manage.py install-cli`。
+- **源码克隆与本地安装**：
+  ```bash
+  git clone https://github.com/moumouye/antigrative-dashboard.git
+  cd antigrative-dashboard
+  python manage.py install
+  ```
+- **CLI 状态栏安装**：在仓库目录运行 `python manage.py install-cli`。
 
 [兼容性文档](https://github.com/moumouye/antigrative-dashboard/blob/main/COMPATIBILITY.md) · [CLI 使用说明](https://github.com/moumouye/antigrative-dashboard/blob/main/docs/CLI.md)

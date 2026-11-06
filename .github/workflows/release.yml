@@ -63,9 +63,7 @@ jobs:
           if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag and plugin version differ' }
       - run: npm test
       - run: python -m unittest discover -s tests -v
-      - run: python manage.py package
-      - run: python ide/package.py
-      - name: Publish desktop/CLI ZIP and IDE VSIX with checksums
+      - name: Publish text-only release notes
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python tools/publish-release.py
+        run: python tools/publish-release.py --text-only

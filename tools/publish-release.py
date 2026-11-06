@@ -99,7 +99,8 @@ class GitHub:
             page += 1
 
 
-def publish(client, tag, commit, notes, assets):
+def publish(client, tag, commit, notes, assets=None):
+    assets = assets or []
     release = client.find(tag)
     if release and not release['draft']:
         raise ValueError('Release is already public; withdraw it before replacing its package')
@@ -109,25 +110,26 @@ def publish(client, tag, commit, notes, assets):
     # All replacements happen while the release is private. Failed uploads leave
     # a draft, never a publicly visible mix of an old ZIP and a new checksum.
     for asset in assets:
-        existing = next((entry for entry in release['assets'] if entry['name'] == asset.name), None)
+        existing = next((entry for entry in release.get('assets', []) if entry['name'] == asset.name), None)
         if existing:
             client.request('DELETE', 'releases/assets/' + str(existing['id']))
         upload = release['upload_url'].split('{', 1)[0] + '?name=' + urllib.parse.quote(asset.name)
         client.request('POST', upload, asset.read_bytes(), 'application/octet-stream')
-    uploaded = client.request('GET', 'releases/' + str(release['id']))
-    if {asset.name for asset in assets} != {entry['name'] for entry in uploaded['assets']}:
-        raise ValueError('Uploaded assets differ from the checked package')
+    if assets:
+        uploaded = client.request('GET', 'releases/' + str(release['id']))
+        if {asset.name for asset in assets} != {entry['name'] for entry in uploaded.get('assets', [])}:
+            raise ValueError('Uploaded assets differ from the checked package')
     result = client.request('PATCH', 'releases/' + str(release['id']), {'draft': False, 'make_latest': 'true'})
-    if result['draft'] or result['tag_name'] != tag:
+    if result.get('draft') or result.get('tag_name') != tag:
         raise ValueError('Publication verification failed')
-    return result['html_url']
+    return result.get('html_url')
 
 
 if __name__ == '__main__':
+    import sys
     root = Path(__file__).resolve().parents[1]
     tag = os.environ['GITHUB_REF_NAME']
-    assets = checked_assets(root, tag)
-    if (root / 'install.py').is_file():
-        assets.append(root / 'install.py')
+    text_only = '--text-only' in sys.argv or os.environ.get('RELEASE_TEXT_ONLY') == '1'
+    assets = [] if text_only else checked_assets(root, tag)
     client = GitHub(os.environ['GITHUB_REPOSITORY'], os.environ['GH_TOKEN'])
     print(publish(client, tag, os.environ['GITHUB_SHA'], (root / 'GITHUB_RELEASE.md').read_text(encoding='utf-8'), assets))
