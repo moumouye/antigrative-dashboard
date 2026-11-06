@@ -16,7 +16,7 @@
 
 </div>
 
-**v0.8.18：** 结合 [PR #28](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/pull/28) 改进 Windows TUN 端口发现、侧栏版本展示，并在 App、IDE 与 CLI 区分 Argon 周额度。[发布说明](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/releases/tag/v0.8.18) · [兼容性](COMPATIBILITY.md)。
+**v0.8.18：** 结合 PR #28 改进 Windows TUN 端口发现、侧栏版本展示，并在 App、IDE 与 CLI 区分 Argon 周额度。[发布说明](https://github.com/moumouye/antigrative-dashboard/releases/latest) · [兼容性](COMPATIBILITY.md)。
 
 ## 看看效果
 
@@ -95,17 +95,29 @@ Linux / macOS 使用 `python3 manage.py install` 或 `sh install.sh`，启停和
 
 > 模型选择旁的内嵌位置没有公开插件挂载接口。现在由标准 sidecar 通过已有本地渲染调试端口挂载控件，默认安装不再修改 `resources/app.asar`。未来宿主 DOM、调试通道、SDK 或统计接口改变时仍可能需要适配；原生侧面板作为备用入口。
 
-### 手动安装
+### 一键在线安装（Python 3.10+）
 
-下载 [最新 Release](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/releases/latest) 的 ZIP 并解压，或克隆仓库：
+直接运行一键安装命令：
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/moumouye/antigrative-dashboard/main/install.py | python3
+
+# Windows PowerShell
+irm https://raw.githubusercontent.com/moumouye/antigrative-dashboard/main/install.ps1 | iex
+```
+
+### 手动安装与源码克隆
+
+下载 [最新 Release](https://github.com/moumouye/antigrative-dashboard/releases/latest) 的 ZIP 并解压，或克隆仓库：
 
 ```powershell
-git clone https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard.git
+git clone https://github.com/moumouye/antigrative-dashboard.git
 cd antigrative-dashboard
 python manage.py install
 ```
 
-完全退出并重新打开 Antigravity。打开对话，模型选择右侧就会出现额度与速率条。PowerShell 用户也可以运行 `./install.ps1`。
+在 Linux / macOS 下，也可以直接使用 `python3 manage.py install`、`python3 install.py` 或 `sh install.sh`。完全退出并重新打开 Antigravity，打开对话，模型选择右侧就会出现额度与速率条。PowerShell 用户也可以运行 `./install.ps1`。
 
 安装器复制并启用插件；迁移时只恢复经过完整校验的旧补丁。后台自动发现当前渲染端口并重新连接。**保留这个源码 / 解压目录**，以便启停、升级和卸载。
 
@@ -114,7 +126,7 @@ python manage.py install
 
 ```text
 请帮我安装并启用 Antigrative Dashboard。
-仓库：https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard
+仓库：https://github.com/moumouye/antigrative-dashboard
 1. 读取 README.md、COMPATIBILITY.md、docs/CLI.md 和 ide/README.md。先用只读检查
    分析系统、可执行文件、宿主版本和已有插件配置，区分桌面 App、Antigravity CLI
    （agy）和独立 Antigravity IDE；不能仅凭系统判断安装目标。

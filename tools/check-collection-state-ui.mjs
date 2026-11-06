@@ -34,7 +34,7 @@ try{for(const lang of ['en','zh-CN','zh-TW']){
  assert.equal(await strip.locator('[data-card=cache]').getAttribute('aria-label'),label);
  assert.equal(await strip.locator('#samples').textContent(),'—');
  await strip.locator('[data-card=cache]').click();const notice=strip.locator('#cache-card .collection-notice');await notice.waitFor({state:'visible'});
- await notice.locator('summary').click();assert.match(await notice.locator('.collection-budget-size').textContent(),/8\.00 MiB/);assert.equal(await notice.locator('a').getAttribute('href'),'https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/blob/main/docs/LONG_CONVERSATIONS.md');
+ await notice.locator('summary').click();assert.match(await notice.locator('.collection-budget-size').textContent(),/8\.00 MiB/);assert.equal(await notice.locator('a').getAttribute('href'),'https://github.com/moumouye/antigrative-dashboard/blob/main/docs/LONG_CONVERSATIONS.md');
  for(const mode of ['saved','serialized','field','empty','normal','limited']){
   await page.keyboard.press('Escape');await page.selectOption('#scenario',mode);
   await page.waitForFunction(mode=>{const r=document.getElementById('ag-pulse-status-bar').shadowRoot;return ['empty','normal'].includes(mode)?!document.getElementById('ag-pulse-status-bar').dataset.collection:mode==='saved'?r.getElementById('tps').textContent==='50.0':r.getElementById('tps').textContent==='—';},mode);

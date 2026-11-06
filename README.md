@@ -16,7 +16,7 @@ Keep the summary visible. Hover for the details.
 
 </div>
 
-**v0.8.18:** Adapt [PR #28](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/pull/28): improve Windows TUN discovery, show the installed version in the side panel, and distinguish Argon's weekly quota across App, IDE and CLI. [Release notes](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/releases/tag/v0.8.18) · [Compatibility](COMPATIBILITY.md).
+**v0.8.18:** Adapt PR #28: improve Windows TUN discovery, show the installed version in the side panel, and distinguish Argon's weekly quota across App, IDE and CLI. [Release notes](https://github.com/moumouye/antigrative-dashboard/releases/latest) · [Compatibility](COMPATIBILITY.md).
 
 ## Preview
 
@@ -97,15 +97,29 @@ Supported: **Windows, Linux and macOS; Antigravity desktop App 2.21.1 / 2.22.0; 
 
 > The inline model-row position has no public plugin mounting API. A standard Antigravity sidecar now attaches the widget through the existing local renderer debugging endpoint. Default installation does not modify `resources/app.asar`. This is unofficial; future changes to the host DOM, debugging channel, SDK or metrics API may require an adapter update. The native side panel remains a fallback.
 
-Download the ZIP from the [latest release](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/releases/latest), extract it to a permanent folder, or clone the repository:
+### Quick Install (Python 3.10+)
+
+Run the one-line installer:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/moumouye/antigrative-dashboard/main/install.py | python3
+
+# Windows PowerShell
+irm https://raw.githubusercontent.com/moumouye/antigrative-dashboard/main/install.ps1 | iex
+```
+
+### Manual Install or Clone
+
+Download the ZIP from the [latest release](https://github.com/moumouye/antigrative-dashboard/releases/latest), extract it to a permanent folder, or clone the repository:
 
 ```powershell
-git clone https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard.git
+git clone https://github.com/moumouye/antigrative-dashboard.git
 cd antigrative-dashboard
 python manage.py install
 ```
 
-On Linux / macOS, use `python3 manage.py install` or `sh install.sh` (and `python3` for the lifecycle commands below). Never run the installer with sudo.
+On Linux / macOS, use `python3 manage.py install` or `sh install.sh` (or `python3 install.py`). Never run the installer with sudo.
 
 Fully quit and reopen Antigravity. Open a conversation: the strip appears beside the model selector. PowerShell users can also run `./install.ps1`.
 
@@ -116,7 +130,7 @@ The installer copies and enables the plugin and restores any exactly verified le
 
 ```text
 Install and enable Antigrative Dashboard on this computer.
-Repository: https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard
+Repository: https://github.com/moumouye/antigrative-dashboard
 1. Read README.md, COMPATIBILITY.md, docs/CLI.md and ide/README.md. Inspect the OS,
    available executables, host versions and existing dashboard configuration with
    read-only checks. Distinguish desktop App, Antigravity CLI (agy) and standalone

@@ -1,21 +1,21 @@
 # AGENTS.md
 
-本仓库是上游项目的二次开发分支。上游每天可能发版，本地增量必须与之共存。
+本仓库为主维护源（原上游项目 `YOU-SHOULD-KNOW-ME/antigrative-dashboard` 已删库，由本仓库 `moumouye/antigrative-dashboard` 接管为主源继续维护与发版）。
 
 ## 铁律
 
-1. **新增文件优先。** 改一处功能，先问能否用新文件实现；必须改上游文件时，先查 [`docs/boundaries.md`](docs/boundaries.md) 的分区，禁改区改动需要明确理由。
+1. **新增文件优先。** 改一处功能，先问能否用新文件实现；模块变更遵循架构分层。
 2. **不重命名、不重排目录。** 文件路径同时被测试 glob、打包白名单、CI 引用，任一改名打断三处。
-3. **不建平行体系。** 测试进上游 glob 目录，门禁进 `tools/check-*.mjs`，文档进 `docs/`。见 [`docs/anti-patterns.md`](docs/anti-patterns.md) AP-003。
-4. **事实只有一个出处。** 上游已描述的内容只写指针，不复制正文。上游文档不得被本地引用反向依赖。
-5. **同步用 cherry-pick，不用 merge。** `git fetch upstream` 后逐条取用。AP-006。
+3. **不建平行体系。** 测试进标准 glob 目录，门禁进 `tools/check-*.mjs`，文档进 `docs/`。见 [`docs/anti-patterns.md`](docs/anti-patterns.md) AP-003。
+4. **事实只有一个出处。** 系统架构与契约只写指针，不复制正文。
+5. **发布规范化。** 发版走 `python manage.py package` 与 GitHub Actions Release 自动流水线，支持单脚本 `install.py` 一键安装。
 6. **改动落地前跑门禁。** `node tools/local-gate.mjs`；涉及渲染、安装、打包时按 [`docs/verification.md`](docs/verification.md) 的矩阵加跑。
 
 ## 动手前
 
 ```bash
 node tools/local-gate.mjs --list        # 当前门禁计划
-git log --oneline main..upstream/main   # 上游已有哪些新提交
+git status                              # 检查当前分支与未提交改动
 ```
 
 判断改动落在哪个分区：`docs/boundaries.md` 的分区表。禁改区文件（`package.json`、`plugin.json`、`CHANGELOG.md`、`compat/inline-widget.cjs`、`compat/usage-ui.cjs` 等）每次触碰都要记录动机。

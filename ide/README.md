@@ -41,7 +41,7 @@ implemented. The desktop App and CLI retain their separate installers.
 ## Install a downloaded VSIX
 
 Download `antigrative-dashboard-ide-0.8.18.vsix` and its `.vsix.sha256` from the
-[release](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/releases/tag/v0.8.18).
+[release](https://github.com/moumouye/antigrative-dashboard/releases/latest).
 In Antigravity IDE, open Extensions, choose **Install from VSIX…** from the
 Extensions menu and select the file. No desktop App installation is required.
 

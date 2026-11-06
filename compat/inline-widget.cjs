@@ -609,7 +609,7 @@ module.exports = function installAgPulseInlineWidget() {
     for(const card of root.querySelectorAll('.card')){
       const notice=document.createElement('section');notice.className='collection-notice';notice.hidden=true;
       setMarkup(notice,'<strong class="collection-state"></strong><p data-i18n="collectionReason"></p><details><summary data-i18n="collectionDetails"></summary><p class="collection-budget-kind"></p><p class="collection-budget-size"></p><p data-i18n="collectionNoPartial"></p></details>');
-      const docs=document.createElement('a');docs.href='https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/blob/main/docs/LONG_CONVERSATIONS.md';docs.target='_blank';docs.rel='noopener noreferrer';docs.dataset.i18n='collectionDocs';notice.querySelector('details').append(docs);
+      const docs=document.createElement('a');docs.href='https://github.com/moumouye/antigrative-dashboard/blob/main/docs/LONG_CONVERSATIONS.md';docs.target='_blank';docs.rel='noopener noreferrer';docs.dataset.i18n='collectionDocs';notice.querySelector('details').append(docs);
       card.querySelector('.heading').after(notice);
       notice.querySelector('details').addEventListener('toggle',()=>{if(!disposed)position();});
     }

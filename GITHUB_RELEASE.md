@@ -16,4 +16,4 @@ The TUN blank-state case and dedicated Argon group have regression coverage with
 - CLI: update the status-line adapter using the included installer and reopen the CLI.
 - Fully quit and reopen the relevant host. Existing statistics and settings are retained; SHA-256 files accompany both packages.
 
-[Compatibility](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/blob/v0.8.18/COMPATIBILITY.md) · [CLI documentation](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/blob/v0.8.18/docs/CLI.md)
+[Compatibility](https://github.com/moumouye/antigrative-dashboard/blob/main/COMPATIBILITY.md) · [CLI documentation](https://github.com/moumouye/antigrative-dashboard/blob/main/docs/CLI.md)
