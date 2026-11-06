@@ -1,15 +1,16 @@
 # Changelog
 
-## 0.8.19 — 2026-11-02
+## 0.8.19 — 2026-11-06
 
-Local build rebased onto the official v0.8.18 collection kernel. It keeps the enhanced dashboard UI (hourly activity chart, estimated cost, component filters, sortable table) and adopts the upstream background statistics, delegation and platform fixes.
-
+- Establish canonical master repository at `moumouye/antigrative-dashboard`.
+- Introduce standalone zero-dependency `install.py` and `install.ps1` cross-platform installers with support for piped execution (`curl -fsSL ... | python3` and `irm ... | iex`) and dual fallback downloading.
+- Support `--text-only` release publication mode in `tools/publish-release.py` and GitHub Actions workflow, decoupling release notifications from mandatory binary bundle assets.
+- Restructure README with Chinese as primary homepage, moving one-line fast installation to the top, with a linked `README.en.md`.
 - Keep one device-level `usage-v1` ledger across accounts. Ownership and freshness guards stay bound to the authenticated identity; only the physical directory is unified. Legacy per-account directories are merged on first read and archived under `.merged-<uuid>/` instead of being deleted.
-- Restore hourly detail in both aggregation paths: the in-memory JSON summary and the disk worker's SQLite summary now emit identical `days[].hours` buckets. Detail is limited to the most recent 120 days and to a separate 1.5 MiB result budget, so the 4 MiB summary cap and `summaryStale` semantics are unchanged.
-- Restore model pricing and CNY cost estimates. `PricingService` is mounted explicitly by the App and IDE entrypoints, so tests, CLI and offline runs never reach the pricing endpoints.
-- Normalize the `-n` model-name suffix in the shared `cleanModel` helper so historical rows and new rows group under one model.
+- Restore hourly detail in both aggregation paths: the in-memory JSON summary and the disk worker's SQLite summary emit identical `days[].hours` buckets.
+- Restore model pricing and CNY cost estimates via offline static pricing tables.
+- Normalize the `-n` model-name suffix in the shared `cleanModel` helper.
 - The usage window shows a rebuilding state while a disk-backed summary publishes nulls, and labels days outside the hourly window instead of reporting zero usage.
-- Carry the v0.8.8–v0.8.18 fixes: bounded history import, queue/checkpoint hardening, delegated subagent usage, IDE 2.6 `agy --hub`, Windows TUN discovery, junction-safe updates and Argon weekly quotas.
 
 ## 0.8.18 — 2026-11-01
 
@@ -17,21 +18,21 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 - Keep all three known CLI quota families visible when Argon is returned. Preserve quota colors, terminal bounds and the existing cache calculation; add `--preview-argon` for a synthetic contract preview.
 - Parse both flat and nested remaining-quota values without treating missing/null values as zero, preserve flat-list bucket families, and use the host's `forceRefresh` request field only for explicit quota refreshes.
 
-- Adapt [PR #28](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/pull/28) by HumanMus1c: support explicit blank Windows socket states only after validating ownership/address fields and confirming the expected loopback target accepts a TCP connection. Missing state fields stay rejected; probes carry no payload, cover at most four targets, and share a 1.5-second budget.
+- Adapt PR #28 by HumanMus1c: support explicit blank Windows socket states only after validating ownership/address fields and confirming the expected loopback target accepts a TCP connection. Missing state fields stay rejected; probes carry no payload, cover at most four targets, and share a 1.5-second budget.
 - Use shared quota presentation rules in the App, IDE and side panel to distinguish Gemini (Argon), including opaque bucket IDs. Keep manual selections; missing model-specific quota stays unavailable. Refresh option labels when host names change without changing IDs.
 - Show the installed plugin version in the side-panel header from its manifest. Invalid manifests omit the badge; narrow panels hide it while retaining the version in the title tooltip. A manifest-only version change invalidates panel asset URLs.
 - Add real loopback positive/negative discovery checks, IDE ownership regressions, behavioral quota tests and browser checks for model switching, missing groups, renamed groups, manual selection, header sizing and themes.
 
 ## 0.8.17 — 2026-11-01
 
-- Fix [#27](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/27): reject Windows TUN fake-IP `LISTENING` rows and recover PID-owned local listeners reported with nonstandard `State: 0`. Revalidate local/remote addresses, ports and state; do not accept `Bound`, `Closed`, unrelated processes or log-only credentials.
+- Fix #27: reject Windows TUN fake-IP `LISTENING` rows and recover PID-owned local listeners reported with nonstandard `State: 0`. Revalidate local/remote addresses, ports and state; do not accept `Bound`, `Closed`, unrelated processes or log-only credentials.
 - Share bounded Windows socket discovery between the App and IDE. Supplement a missing current HTTP/CDP port even when another listener or a reused historical port exists. Preserve native fast-path discovery, one batched fallback, timeout/output limits, concurrent-request coalescing and retry backoff.
 - When default App log locations coexist, prefer the most recently modified readable log for port hints; a stale profile log no longer masks a newer native log. Explicit log overrides remain authoritative and all ports still require live PID ownership.
 - Add synthetic TUN, partial socket-table, ownership and reconnect regressions. Verify native Windows netstat/CIM discovery in a separate CI/release step with unchanged production timeouts.
 
 ## 0.8.16 — 2026-10-31
 
-- Fix [#26](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/26): support Antigravity IDE 2.6.0's `agy --hub` backend while retaining the 2.5.5 language-server path. Renderer attachment no longer waits for metrics discovery, so temporary backend failures keep the composer controls mounted and return offline metrics.
+- Fix #26: support Antigravity IDE 2.6.0's `agy --hub` backend while retaining the 2.5.5 language-server path. Renderer attachment no longer waits for metrics discovery, so temporary backend failures keep the composer controls mounted and return offline metrics.
 - Bound process lineage and renderer-port ownership checks, reject ordinary `agy`, LSP and ambiguous multi-instance matches, and add Windows/POSIX discovery and mount regressions.
 
 ## 0.8.15 — 2026-10-30
@@ -42,12 +43,12 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 
 ## 0.8.14 — 2026-10-30
 
-- Fix [#24](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/24): resolve a sidebar subagent from its local conversation area and composer instead of falling back to the main page's conversation. Focus changes refresh the selected agent promptly; unavailable or ambiguous local identities do not borrow the parent's statistics.
+- Fix #24: resolve a sidebar subagent from its local conversation area and composer instead of falling back to the main page's conversation. Focus changes refresh the selected agent promptly; unavailable or ambiguous local identities do not borrow the parent's statistics.
 - Keep inline requests with unresolved conversation identity quota-only, avoiding unnecessary reads of the latest conversation. Standalone panel selection and account-wide quotas retain their existing behavior.
 
 ## 0.8.13 — 2026-10-30
 
-- Fix [#23](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/23): support relocated user directories such as a Windows `.gemini` junction, including the physical module path supplied by Node. Bind install and recovery operations to validated physical directories while continuing to reject linked plugin roots and runtime entries.
+- Fix #23: support relocated user directories such as a Windows `.gemini` junction, including the physical module path supplied by Node. Bind install and recovery operations to validated physical directories while continuing to reject linked plugin roots and runtime entries.
 - Distinguish local installation-path failures from package verification in English, Simplified Chinese and Traditional Chinese. Expired update plans request a fresh check, and an uncertain worker result no longer claims the previous version was retained.
 - Keep update backups outside the installed runtime when an older sidecar stores its data there, preventing recursive self-copy. Preserve private records and reject transaction/backup overlap or changed directory identities.
 - Add real process upgrade regressions for logical junction paths, physical paths and legacy runtime-local data to the cross-platform update gate.
@@ -56,7 +57,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 
 ## 0.8.12 — 2026-10-29
 
-- Fix [#22](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/22): consume a stable, bounded history-import queue across slices so deleted, temporarily unlisted or evicted candidates cannot cause an endless 250 ms continuation loop. Retain failed imports for retry and preserve saved usage.
+- Fix #22: consume a stable, bounded history-import queue across slices so deleted, temporarily unlisted or evicted candidates cannot cause an endless 250 ms continuation loop. Retain failed imports for retry and preserve saved usage.
 - Apply the explicit `usageSync` gate to standalone IDE metrics as well as App metrics. Normal polling, card refreshes and expired-quota refreshes do not request historical backfill.
 - Use a synchronous cached ownership boolean in collection guards, with asynchronous verification at runtime boundaries. Stop accepting old collector results after detected takeover, and remove settings-file reads from per-page ownership checks.
 - Bound checkpoint persistence and save it once per slice instead of rewriting the full journal after every conversation. Retain an oversized legacy checkpoint for recovery while rebuilding bounded metadata; usage records remain intact.
@@ -88,7 +89,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 
 ## 0.8.9 patch — 2026-10-27
 
-- Fix [#21](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/21): the Windows parent command launcher can retain a runtime-directory handle after Node relocates. Keep directory identities stable and atomically replace verified public files on Windows; launch Node/Python from a stable directory. Retain durable backup, crash recovery and private data, and reject linked recovery paths before any file mutation.
+- Fix #21: the Windows parent command launcher can retain a runtime-directory handle after Node relocates. Keep directory identities stable and atomically replace verified public files on Windows; launch Node/Python from a stable directory. Retain durable backup, crash recovery and private data, and reject linked recovery paths before any file mutation.
 - Probe Python 3.10+ before running a worker. Unusable Windows Store aliases and old interpreters can fall back to `py -3` or `python3`; an installation that has started is never retried automatically with another interpreter.
 - Preserve Windows static system proxies when the environment contains only `NO_PROXY`, retain explicit protocol overrides, and share a bounded check budget across the API and official-page fallback. Keep certificate and hostname verification enabled.
 - Show localized, predefined failure reasons for locked/unwritable files, Python, timeouts, DNS, certificates, proxies and HTTP/connection errors. Do not expose raw exception text, paths or proxy credentials.
@@ -96,7 +97,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 
 ## 0.8.9 — 2026-10-24
 
-- Address [#20](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/20): include delegated subagent Token/cache usage in the selected task's summary, with current-agent and subagent contribution rows. Selecting a child shows its own subtree; TPS, timing, steps, sampled model, context and account quotas retain their original scopes.
+- Address #20: include delegated subagent Token/cache usage in the selected task's summary, with current-agent and subagent contribution rows. Selecting a child shows its own subtree; TPS, timing, steps, sampled model, context and account quotas retain their original scopes.
 - Discover descendants through structured parent/root metadata and legacy/modern `invokeSubagent` result IDs. Exclude ordinary forks and discard embedded messages, prompts and tool-result text through the streaming projection.
 - Collect children asynchronously using bounded pagination, request/conversation deduplication, account/backend/ownership checks, retry backoff and manual refresh. Resume unread children first after a bounded pass; preserve coherent known totals during incomplete responses and restarts.
 - Ingest each conversation independently into the daily/monthly ledger. Backfill unlisted descendants across batches and recheck older checkpoints once, without adding task totals as a second parent request.
@@ -105,7 +106,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 ## 0.8.8 — 2026-10-21
 
 - Settle malformed projected-statistics RPC failures directly before closing transport, avoiding an unresolved request when a completed request emits no further error. Add a deterministic regression and bounded fixture/test cleanup.
-- Integrate [#18](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/pull/18), with thanks to @Lorin1470: add Traditional Chinese localization across App, IDE, side panel, Token usage, onboarding, update feedback and CLI (`--language zh-TW`).
+- Integrate PR #18, with thanks to @Lorin1470: add Traditional Chinese localization across App, IDE, side panel, Token usage, onboarding, update feedback and CLI (`--language zh-TW`).
 - Provide explicit English / 简体中文 / 繁體中文 choices, retaining the context footer location and using a keyboard-accessible menu in the panel and usage window. Preserve the bilingual discovery flow, English default and existing selections.
 - Persist Traditional Chinese across fresh renderers/backends and independent guide writes. Correct missing-key/error fallback and avoid redundant guide writes during polling.
 - Keep UTC+8 accounting boundaries, recorded usage, annual heatmaps, model charts and responsive/theme behavior unchanged. Extend locale, persistence, CLI shell/width, Trusted Types, keyboard, sandbox and narrow-layout regression coverage.
@@ -119,18 +120,18 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 
 ## 0.8.7 — 2026-10-15
 
-- Integrate [#17](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/pull/17): discover historical IDs independently from the App/IDE conversation and brain directories, then read usage from the authenticated local API. Host directories and ledgers remain separate; custom IDE storage does not disable discovery.
+- Integrate PR #17: discover historical IDs independently from the App/IDE conversation and brain directories, then read usage from the authenticated local API. Host directories and ledgers remain separate; custom IDE storage does not disable discovery.
 - Repair prior partial imports using the shared paginated statistics reader, with existing memory/deadline/revision checks. Persist hashed per-account source signatures and completion/retry checkpoints, retry failed archives with backoff, retain queued manual full refreshes and yield short background batches. Installation no longer starts a separate ledger writer; previous statistics/preferences remain intact.
 - Accept official SidecarApp SDKs without the optional `close` prototype method while still checking required exports and loopback binding.
 - Eliminate long-chat usage-window open/close stalls caused by native whole-document modal inertness changes. Keep a top-layer dialog, backdrop, Escape, nested year menus, keyboard focus containment/return and composer-replacement recovery. Add a synthetic 20,000-element regression.
-- Adopt only the manual App update feature proposed in [#16](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/pull/16). Entry: context details → bottom-right **⋯ → Check for updates**. Checks run only after a click; IDE/CLI and the host application are not update targets.
+- Adopt only the manual App update feature proposed in PR #16. Entry: context details → bottom-right **⋯ → Check for updates**. Checks run only after a click; IDE/CLI and the host application are not update targets.
 - Harden updates with exact official asset/version/path identity, required SHA-256 and download size, bounded extraction, link/duplicate-path rejection, coalesced concurrent actions, OS-backed lifecycle locking, durable backup/journals and independent interrupted-update recovery. Slow checks poll asynchronously; a narrowly scoped TLS 1.2 retry retains certificate/hostname validation.
 - Preserve the annual heatmap, current model charts and compact controls. The hourly chart, cost estimation, component filters and unrelated layout changes in #16 are not included. CLI behavior is unchanged.
 - Publish App/CLI ZIP and IDE VSIX with SHA-256 files. Windows local acceptance and synthetic/browser tests do not establish macOS/Linux signed-in GUI acceptance, future-release startup, physical power-loss or damaged-media recovery. See [usage](docs/USAGE.md) and [update boundaries](docs/UPDATES.md).
 
 ## 0.8.6 — refreshed packages 2026-10-15 (initial release 2026-10-14)
 
-- Fix [#12](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/12): count readable uncached input, cache reads/writes and output independently of cache-rate eligibility. Keep conservative coverage, valid zero-input semantics, safe sums and restart recovery without deleting saved usage.
+- Fix #12: count readable uncached input, cache reads/writes and output independently of cache-rate eligibility. Keep conservative coverage, valid zero-input semantics, safe sums and restart recovery without deleting saved usage.
 - Simplify Token/cache cards and the inline strip: remove repeated inequality prefixes, calculation prose and coverage-count paragraphs while retaining measured values and unavailable-value dashes. Detailed limits remain in the README.
 - Simplify context cards: keep host occupancy, used/total tokens, sampled model, shared quotas/reset times and bottom language controls. Remove duplicate capacity references, unknown compaction fields and logged-text diagnostic UI. Provider references never replace the host denominator.
 - Include reviewed #13 IDE process ownership and validated SDK compatibility, #14 context semantics, and #15 bounded optional transcript collection/rewind identity. Transcript diagnostics remain numeric backend data; unsupported compaction/image event cases have synthetic coverage only.
@@ -148,7 +149,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 - Redesign the App side panel as a persistent dashboard: three metric cards also select detail tabs, compact quota summaries stay visible, the default speed details remain open, and long details scroll within a fixed frame. Pointer departure no longer hides selected information; arrow/Home/End keyboard selection is supported. Shared metrics, preference storage and theme adaptation are retained.
 - Version panel scripts and styles together from a content hash and serve uncached resources; align the hosted iframe background with its derived theme despite the SDK's inline body background. Prevent mixing new HTML with cached older code/styles during plugin updates.
 
-- Address [#11](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/11): serve the sidecar panel as a self-contained classic script instead of loading ESM dependencies from plugin://. Defer the entry script, wait for DOM readiness, guard missing widgets and prevent duplicate initialization. Both the SDK and standalone preview use the same bundle generator.
+- Address #11: serve the sidecar panel as a self-contained classic script instead of loading ESM dependencies from plugin://. Defer the entry script, wait for DOM readiness, guard missing widgets and prevent duplicate initialization. Both the SDK and standalone preview use the same bundle generator.
 - Add one asynchronous, hidden and time-bounded PID-filtered Get-NetTCPConnection fallback when Windows netstat has no listener for a candidate or fails. Recognize localized listening states and try the Windows .gemini log location as a fallback, retaining process/port ownership validation and explicit log overrides.
 - Add Chromium checks for ordinary and early classic-script loading, opaque sandboxed iframe execution, metrics/cache/context/quota display, language/manual refresh, automatic recovery and duplicate scripts. Windows signed-in plugin:// verification reproduces the old uninitialized module panel and confirms the restarted classic/deferred panel, matching inline metrics, language switching and manual refresh. The reporting user's machine remains a separate acceptance scope.
 
@@ -163,7 +164,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 
 ## 0.8.1 — 2026-10-12
 
-- Address [#9](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/9) in the App runtime adapter: retain the widget during send/stop/cancel transitions, discover static Teamwork badges without title/span assumptions, and scope visible editors/model controls to their nearest composer owner. Ignore hidden/inert and deeper nested editors; reject ambiguous anchors.
+- Address #9 in the App runtime adapter: retain the widget during send/stop/cancel transitions, discover static Teamwork badges without title/span assumptions, and scope visible editors/model controls to their nearest composer owner. Ignore hidden/inert and deeper nested editors; reject ambiguous anchors.
 - Recreate the usage controller after a closed-dialog composer teardown, rather than reattaching a strip whose dialog was already disposed. Invalidate pending requests from that mount. Context language choices update usage-entry labels immediately and keep the usage dialog localized. Desktop/IDE browser regressions cover temporary missing composers; English/Chinese Teamwork fixtures cover main/subagent return navigation and clickable localized usage windows after remount.
 - Follow the active composer's nearest `data-cascade-id` when nested navigation leaves the route unchanged. Invalid explicit IDs clear conversation statistics rather than inheriting the parent route; late responses remain isolated. Add English/Chinese production-browser regressions for six nesting levels, working controls, DOM-only navigation and ambiguity. Windows signed-in three-level delegation checks cover independent metrics, return navigation and a generating-state screenshot. That host changes the route and renders one composer, so six-level DOM and unchanged-route coverage remain browser fixtures. User acceptance and Linux/macOS GUI checks remain open.
 - Prioritize current-request cache-read percentage in the CLI status line, with read tokens as secondary text. Narrow terminals retain context/cache percentages before bars, read counts and state. Keep unknown counter semantics unavailable and expose the reason in allowlisted JSON.
@@ -177,7 +178,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 - Add local Token usage to the desktop App and standalone IDE: daily/weekly contribution grids, day/week/month model stacks, model filtering, full-count tooltips/tables, and a compact two-column Today / This month cache-card entry. Theme-driven model colors follow custom accent/background changes.
 - Keep the usage frame stable across month changes, empty data, missing snapshots, account switches and composer replacement. Use a themed year menu and aligned controls; manual refresh queues behind polling and completes a visible rotation.
 - Explain local history import, UTC+8 date boundaries, coverage/billing limits and storage on first opening. Persist acknowledgment independently of language; save failures stay visible and retryable. Local replay controls are excluded from packaged collectors.
-- Address [#8](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/8): pair response tokens with their own stream durations, quarantine inconsistent token/retry/duplicate scopes and suspicious brief tool-only windows, and use a same-model median/MAD baseline for short outliers. Do not cap sustained high throughput or invent generation time. Token/cache/context counts remain available.
+- Address #8: pair response tokens with their own stream durations, quarantine inconsistent token/retry/duplicate scopes and suspicious brief tool-only windows, and use a same-model median/MAD baseline for short outliers. Do not cap sustained high throughput or invent generation time. Token/cache/context counts remain available.
 - Recalculate legacy saved TPS from complete trajectories, retaining other statistics and protecting full coverage from partial backend responses. An unreliable latest request stays unavailable rather than borrowing an older rate.
 - Fix hover cards staying open after closing usage: pointer-restored focus no longer reopens or pins a card; keyboard focus and Escape return remain supported. Desktop/IDE regressions cover the full return-and-hover flow.
 - Retain usage in a separate account-scoped `usage-v1` ledger, deduplicated by hashed request identity. No prompts, replies or credentials are stored. Available local history is backfilled; deleting chats does not erase already recorded consumption. Desktop and IDE ledgers stay separate; CLI behavior is unchanged.
@@ -196,7 +197,7 @@ Local build rebased onto the official v0.8.18 collection kernel. It keeps the en
 
 ## 0.6.4 — 2026-10-10
 
-- Address [#6](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/6): remove the duplicate toolbar language button; retain explicit English / 简体中文 choices at the bottom of context details. Add a compact bilingual first-use tip beside the context chip so users can find the setting despite the English default. Opening the tip locates and focuses the language choices without stealing focus on initial display.
+- Address #6: remove the duplicate toolbar language button; retain explicit English / 简体中文 choices at the bottom of context details. Add a compact bilingual first-use tip beside the context chip so users can find the setting despite the English default. Opening the tip locates and focuses the language choices without stealing focus on initial display.
 - Persist guide completion independently of the renderer origin. Closing the tip keeps the current language; successfully choosing either language completes onboarding. Failed saves remain visible and retryable. Show the guide in the main composer only; existing saved language choices are retained.
 - Protect native subagent labels and SVG sizes when the sidebar narrows the composer. Reserve their natural width, switch to three icons earlier, release all plugin flex space if the icons cannot fit, and restore full statistics when space returns. Avoid repeated full-layout probes and no-op class mutations during continuous dragging.
 - Add first-use, dismissal, explicit language choice, save-failure retry, fresh-origin/backend persistence and native-label/icon geometry regressions.

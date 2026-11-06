@@ -18,10 +18,10 @@
 * **计费引擎离线计算**：价格表（`sidecars/panel/pricing.mjs`）为纯静态硬编码字典，人民币与美元成本估算纯本地完成，严禁发起外部汇率或价格网络请求；
 * **凭据与正文隔离**：用量分析仅提取数值元数据（Prompt Tokens、Completion Tokens、Model Name），严禁收集、解析或向磁盘持久化任何用户对话正文、Prompt 提示词或敏感认证密钥。
 
-### ③ 零依赖与极简构建红线 (Zero External Dependencies)
+### ③ 零依赖与极简运行红线 (Zero External Dependencies)
 * **零生产环境 npm 依赖**：生产运行态不依赖 `node_modules`，不引入外部构建器（Webpack、Vite、Rollup）。运行时使用原生 Node.js ESM (`.mjs`) 与 Webview 专用的 CommonJS (`.cjs`)；
 * **零外部 pip 依赖**：安装引导器（`install.py`）、打包工具（`manage.py`）及发布工具（`tools/publish-release.py`）必须仅使用 Python 3 标准库（`urllib`, `json`, `zipfile`, `shutil`, `sys`, `os`），确保在任何全新机器上开箱即跑；
-* **不引入 TypeScript 编译链至运行时**：严禁将运行时源文件重命名为 `.ts` 并引入构建产物（详见 AP-001）。类型安全性统一依托 `// @ts-check` + JSDoc 类型注释。
+* **零运行时构建黑盒**：严禁在运行路径中引入任何即时编译（JIT/Babel/TS 转译）步骤，保持源码直读与透明调试。
 
 ### ④ 持久化安全与幂等归档红线 (Storage Safety & Idempotent Migration)
 * **设备级统一账本**：用量数据按设备全局作用域唯一落盘于 `~/.gemini/antigravity/usage/`；
@@ -43,8 +43,8 @@
 
 ---
 
-## 3. 架构硬禁区 (Architectural Anti-Patterns Checklist)
+## 3. 架构硬禁区 (Architectural Hard Forbidden Zones)
 
-1. **严禁全树 JS 改 TS**：打断打包白名单、破坏运行时文本直读、增加构建黑盒（见 [`docs/anti-patterns.md`](anti-patterns.md) AP-001）；
+1. **严禁破坏模块寻址规范**：所有 Webview 渲染视图必须统一走 `compat/usage-view.mjs` 解析器收口，严禁硬编码私有加载路径（详见 [`docs/anti-patterns.md`](anti-patterns.md) AP-001）；
 2. **严禁目录重排或文件随意重命名**：文件路径被测试 glob、打包清单、CI 流程与运行时动态加载硬编码约束，任意重命名将打断三处以上链路；
-3. **严禁建立平行体系**：严禁新增 `tests-local/`、`docs-local/`、`scripts-dev/` 等平行目录。所有测试进入既有标准 glob，所有门禁接入 `tools/local-gate.mjs`，所有文档受控收敛于 `docs/`（见 AP-003）。
+3. **严禁在发布链路强耦合二进制产物**：发布流程必须支持纯文本状态广播（`--text-only`），严禁强制断言本地构建文件存在（详见 AP-002）。

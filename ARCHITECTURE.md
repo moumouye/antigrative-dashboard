@@ -33,12 +33,12 @@ flowchart TD
 * **核心内容**：Webview 源码注入契约、单脚本安装引导契约、多文件版本同步契约、文本模式发布契约。
 
 ### 3. [③ 否决与避坑档案 (docs/anti-patterns.md)](docs/anti-patterns.md)
-* **适用场景**：技术选型重构、排查疑难 Bug、准备引入构建工具或调整目录时必读；
-* **核心内容**：TS 迁移陷阱 (AP-001)、直接改写基线文件 (AP-002)、平行体系污染 (AP-003)、失效源依赖 (AP-008)、发布空包断言崩溃 (AP-009) 等实测废案。
+* **适用场景**：技术选型重构、排查疑难 Bug、准备修改加载逻辑或调整发版时必读；
+* **核心内容**：Webview 多注入管线未统一收口 (AP-001)、发布流水线强耦合附件 (AP-002)、安装链路硬编码非受控远程源 (AP-003) 等实测暗知识。
 
 ### 4. [④ 质量验收门禁 (docs/verification.md)](docs/verification.md)
-* **适用场景**：完成代码修改、准备提交 PR/Release、验证反向防倒退断言时必读；
-* **核心内容**：本地门禁执行命令（`tools/local-gate.mjs`）、CDP 无头走查、四大物理不变量断言标准。
+* **适用场景**：完成代码修改、准备提交 PR/Release、校准反向防倒退断言时必读并执行；
+* **核心内容**：本地门禁执行命令（`node tools/local-gate.mjs`）、CDP 真实环境走查、四大物理不变量断言标准。
 
 ---
 
@@ -66,8 +66,8 @@ flowchart TD
     subgraph Rendering ["双端渲染注入层 (Dual Rendering Ingestion)"]
         ViewResolver["compat/usage-view.mjs<br/>视图路径唯一解析器 (含优雅回退)"]
         InlineWidget["compat/inline-widget.cjs<br/>Shadow DOM 容器挂载器"]
-        UsageViewLocal["compat/usage-ui.local.cjs<br/>自研用量看板 (24h 日内分布 / 成本测算)"]
-        UsageViewBase["compat/usage-ui.cjs<br/>原始基线视图 (备用/回退基座)"]
+        UsageViewLocal["compat/usage-ui.local.cjs<br/>增强用量看板 (24h 日内分布 / 成本测算)"]
+        UsageViewBase["compat/usage-ui.cjs<br/>基准用量视图 (备用/回退基座)"]
         
         PatchLoader -->|源码文本注入| InlineWidget
         IDE -->|源码文本注入| InlineWidget
@@ -107,7 +107,7 @@ flowchart TD
 | [`docs/contracts.md`](docs/contracts.md) | Webview 注入协议、打包清单、安装与发布协议 | 接口调整、渲染管道变更、版本发布时 |
 | [`docs/anti-patterns.md`](docs/anti-patterns.md) | 实测已否决方案、技术陷阱与失效根因记录 | 技术选型、避免重蹈覆辙时必查 |
 | [`docs/verification.md`](docs/verification.md) | 质量门禁矩阵、CDP 自动化、四大物理不变量 | 任何代码提交、发版、缺陷反向断言追肥前 |
-| [`docs/LOCAL_CHANGES.md`](docs/LOCAL_CHANGES.md) | 架构演进与自研功能里程碑流水 | 追溯特定功能实现背景与架构决策历史 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 全版本演进与发布记录 | 追溯特定版本功能特性与修复流水 |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | 基础工程目录全景、原生环境要求与核心测试规范 | 初次进入项目开发、了解全量目录结构时 |
 | [`docs/ROBUSTNESS.md`](docs/ROBUSTNESS.md) | 进程生命周期、故障恢复与降级容灾矩阵 | 涉及服务重启、异常崩溃防御设计时 |
 | [`docs/USAGE.md`](docs/USAGE.md) | Token 统计口径、会话采样定义与数据结构 | 调整计费口径、Token 解析规则时 |

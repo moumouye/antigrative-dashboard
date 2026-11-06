@@ -70,7 +70,7 @@ library could keep the host API, disk ledger and Node heap busy even when the us
 was only viewing the current conversation.
 
 **v0.8.12** completes the history-import protections and fixes the three runtime
-problems reported in [#22](https://github.com/YOU-SHOULD-KNOW-ME/antigrative-dashboard/issues/22):
+problems reported in #22:
 
 - Opening **View token usage**, or clicking the usage window's top-right circular
   arrow **Refresh usage**, requests historical synchronization. Ordinary metrics

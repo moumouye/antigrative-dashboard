@@ -37,10 +37,10 @@ sequenceDiagram
     participant Webview as 渲染上下文 (Webview Window)
 
     Host->>Resolver: 查询首选视图路径 usageViewPath()
-    alt 存在自研定制看板
+    alt 存在增强用量看板 (usage-ui.local.cjs)
         Resolver-->>Host: 返回 compat/usage-ui.local.cjs
     else 文件缺失
-        Resolver-->>Host: 降级回退 compat/usage-ui.cjs
+        Resolver-->>Host: 降级回退基准视图 compat/usage-ui.cjs
     end
     Host->>Host: 读取源码文本并提取工厂表达式 usageViewExpression(src)
     Host->>Webview: 执行字符串脚本注入
@@ -65,7 +65,7 @@ export function usageViewExpression(source) {
 ### 管道约束
 1. **导出单一性**：被注入的 `.cjs` 必须有且仅有一处 `module.exports = `，其后必须是单个匿名函数或类表达式；
 2. **全局命名空间隔离**：跨文件工厂通信严格遵循 `window.__agPulse*Factory` 命名空间约定；
-3. **覆盖式注入**：IDE 管道先加载基线文件、再加载自研覆盖文件，确保自研能力在同一个全局变量名下生效；
+3. **双重注入与容灾覆盖**：IDE 管道先挂载基准视图、再覆盖增强看板（`usage-ui.local.cjs`），保证即使增强文件缺失也能平滑降级而非直接报错；
 4. **惰性消费**：UI 挂载点在宿主渲染准备就绪后惰性调用 `window.__agPulseUsageFactory({ root, language, ... })`，工厂晚于挂载点定义是安全的。
 
 ---
