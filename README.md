@@ -144,6 +144,14 @@ python manage.py install-cli   # 安装 CLI 状态栏适配器
 
 ---
 
+## 💡 致谢与背景说明
+
+- 本项目最初基于 **YOU-SHOULD-KNOW-ME/antigrative-dashboard** 的早期版本开发。
+- 鉴于原作者已注销 GitHub 账号且原仓库已下线，本项目已作为**独立主干（Canonical Repository）**全面接管后续的架构重构、多端适配与长期维护。
+- 衷心感谢原作者最初的开源灵感与基础贡献。
+
+---
+
 ## 📄 开源许可
 
 本项目基于 [MIT License](LICENSE) 开源发布。

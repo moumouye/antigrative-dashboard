@@ -144,6 +144,14 @@ No. The plugin files reside safely in your user configuration directory. The run
 
 ---
 
+## 💡 Attribution & Background
+
+- This project was originally forked from **YOU-SHOULD-KNOW-ME/antigrative-dashboard**.
+- Following the removal of the original author's GitHub account and repository, this repository now serves as the **canonical upstream** for ongoing architectural refactoring, multi-host support, and long-term maintenance.
+- Sincere thanks to the original author for the initial inspiration and foundation.
+
+---
+
 ## 📄 License
 
 Distributed under the [MIT License](LICENSE).<br>
