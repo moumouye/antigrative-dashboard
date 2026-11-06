@@ -6,12 +6,17 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import urllib.error
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('pulse_manager', ROOT / 'manage.py')
 manager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(manager)
+
+install_spec = importlib.util.spec_from_file_location('installer', ROOT / 'install.py')
+installer = importlib.util.module_from_spec(install_spec)
+install_spec.loader.exec_module(installer)
 
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
@@ -134,5 +139,22 @@ class LifecycleTests(unittest.TestCase):
             manager.package(output)
         with zipfile.ZipFile(output) as bundle:
             self.assertEqual(set(bundle.namelist()), {'antigrative-dashboard/plugin.json', 'antigrative-dashboard/sidecars/panel/main.mjs'})
+
+    def test_installer_handles_network_error_gracefully(self):
+        with patch.object(installer, 'fetch_url', side_effect=urllib.error.URLError('connection refused')):
+            self.assertIsNone(installer.get_release_asset_info('0.8.19'))
+
+    def test_installer_checksum_mismatch_raises_runtime_error(self):
+        fake_info = {
+            'tag': 'v0.8.19',
+            'zip_url': 'https://example.com/bundle.zip',
+            'zip_name': 'bundle.zip',
+            'sha_url': 'https://example.com/bundle.zip.sha256',
+        }
+        with patch.object(installer, 'get_release_asset_info', return_value=fake_info), \
+             patch.object(installer, 'fetch_url', side_effect=[b'fake-zip-data', b'bad-sha256-hash  bundle.zip']):
+            with tempfile.TemporaryDirectory() as target_dir:
+                with self.assertRaisesRegex(RuntimeError, 'Checksum mismatch'):
+                    installer.download_and_extract(Path(target_dir), '0.8.19')
 
 if __name__ == '__main__': unittest.main()

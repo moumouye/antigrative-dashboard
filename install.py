@@ -74,12 +74,14 @@ def download_and_extract(target_dir, version=None):
             if release_info.get('sha_url'):
                 try:
                     sha_expected = fetch_url(release_info['sha_url']).decode('utf-8').split()[0].strip()
+                except Exception as e:
+                    print(f"[!] Checksum download warning: {e}")
+                    sha_expected = None
+                if sha_expected:
                     sha_actual = hashlib.sha256(zip_bytes).hexdigest()
-                    if sha_expected and sha_actual != sha_expected:
+                    if sha_actual != sha_expected:
                         raise RuntimeError(f"Checksum mismatch! Expected {sha_expected}, got {sha_actual}")
                     print("[✓] Checksum verified.")
-                except Exception as e:
-                    print(f"[!] Checksum verification warning: {e}")
         else:
             # Fallback to source archive if release is not yet published
             branch = f"v{version}" if version else "main"

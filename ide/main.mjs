@@ -3,6 +3,7 @@ import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {SidecarOwner} from '../compat/sidecar-owner.mjs';
 import {RuntimeUi,makeRendererSource} from '../compat/runtime-ui.mjs';
+import {usageViewPath,usageViewExpression} from '../compat/usage-view.mjs';
 import {PreferencesStore} from '../compat/preferences.mjs';
 import {MetricsStore} from '../sidecars/panel/store.mjs';
 import {SessionHistory} from '../sidecars/panel/history.mjs';
@@ -26,10 +27,11 @@ store.onTrajectory=async(scope,id,raw,options={})=>{
 };
 store.onBackgroundResult=(scope,id,file,options)=>usage.ingestDisk(scope,id,file,options);
 const preferences=new PreferencesStore({file:join(data,'preferences.json')});
-const files=await Promise.all(['compat/i18n.cjs','compat/inline-widget.cjs','compat/theme.cjs','ide/surface.cjs','compat/usage-ui.cjs'].map(f=>readFile(join(root,f),'utf8')));
+const files=await Promise.all(['compat/i18n.cjs','compat/inline-widget.cjs','compat/theme.cjs','ide/surface.cjs'].map(f=>readFile(join(root,f),'utf8')));
+const usageContent=await readFile(usageViewPath(),'utf8');
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
 if(!await ownership.claim())process.exit(0);
-const usageSource=`window.__agPulseUsageFactory=(${extract(files[4])});`;
+const usageSource=`window.__agPulseUsageFactory=${usageViewExpression(usageContent)};`;
 const owner=ownership.token,source=makeRendererSource(...files.slice(0,3),owner,ownership.startedAt,usageSource);
 const adapter=`window.__agPulseSurface=(${extract(files[3])})();`;
 // Each workbench has its own bridge request ID and DOM conversation ID. Empty

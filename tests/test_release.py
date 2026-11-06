@@ -64,3 +64,25 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'already public'):
             publisher.publish(client, 'v0.5.0', 'new-commit', 'notes', [])
         self.assertEqual(client.publications, 0)
+
+    def test_text_only_release_publishes_without_assets(self):
+        client = FakeGitHub()
+        url = publisher.publish(client, 'v0.5.0', 'new-commit', 'notes', assets=[])
+        self.assertTrue(url.endswith('/v0.5.0'))
+        self.assertEqual(client.publications, 1)
+        self.assertFalse(client.release['draft'])
+
+    def test_uploaded_asset_mismatch_aborts_publication(self):
+        class BrokenUploadGitHub(FakeGitHub):
+            def request(self, method, path, data=None, content_type=None):
+                res = super().request(method, path, data, content_type)
+                if method == 'GET' and 'releases/' in path:
+                    return {**self.release, 'assets': []}
+                return res
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = BrokenUploadGitHub()
+            with self.assertRaisesRegex(ValueError, 'Uploaded assets differ'):
+                publisher.publish(client, 'v0.5.0', 'new-commit', 'notes', self.assets(directory))
+            self.assertTrue(client.release['draft'])
+            self.assertEqual(client.publications, 0)

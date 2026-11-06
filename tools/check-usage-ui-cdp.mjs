@@ -8,10 +8,12 @@ import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import assert from 'node:assert/strict';
+import {usageViewPath,usageViewExpression} from '../compat/usage-view.mjs';
 
 const repo=join(dirname(fileURLToPath(import.meta.url)),'..');
-const files=['compat/i18n.cjs','compat/theme.cjs','compat/inline-widget.cjs','compat/usage-ui.cjs'];
+const files=['compat/i18n.cjs','compat/theme.cjs','compat/inline-widget.cjs'];
 const sources=await Promise.all(files.map(f=>readFile(join(repo,f),'utf8')));
+const usageSource=await readFile(usageViewPath(),'utf8');
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
 const chrome=process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
@@ -35,7 +37,7 @@ window.metricsRequests=[];
 window.agPulseHost={getMetrics:async input=>{metricsRequests.push(input);return {connection:'live',usage:testData,preferences:testPrefs,groups:[],speed:null};},getPreferences:async()=>testPrefs,setPreferences:async x=>{if(window.failGuideSave&&x.usageGuideDismissed)throw Error('Fixture save failure');return testPrefs={...testPrefs,...x,revision:testPrefs.revision+1};}};
 window.__agPulseI18nFactory=(${extract(sources[0])});
 window.__agPulseThemeFactory=(${extract(sources[1])});
-window.__agPulseUsageFactory=(${extract(sources[3])});
+window.__agPulseUsageFactory=${usageViewExpression(usageSource)};
 (${extract(sources[2])})();
 </script></body></html>`;
 
