@@ -47,7 +47,7 @@ Regressions cover host/reference disagreement, missing and invalid counters, zer
 
 模型 ID 的小数点和连字符写法统一解析，精确识别已核实型号；未知型号不继承其他型号的容量。恢复保存记录时重新计算派生值，并拒绝任意来源 URL、非法阈值和未知字段。
 
-## Optional recorded-text breakdown (PR #15)
+## Optional recorded-text breakdown
 
 The collector can retain an optional **Recorded text estimate** in its numeric diagnostic result. This breakdown is not rendered in the compact App or IDE context card. This classifies readable transcript strings into user text, assistant replies/thinking, tool output and system/checkpoint text. It does not replace the host occupancy percentage, request Token counters, cache hit rate or daily/monthly usage ledger.
 

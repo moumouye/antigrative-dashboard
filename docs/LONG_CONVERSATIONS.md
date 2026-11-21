@@ -1,6 +1,6 @@
-# Long-conversation collection (v0.8.5)
+# Long-conversation collection
 
-## History-library scheduling (v0.8.12)
+## History-library scheduling
 
 Trajectory memory budgets protect one conversation read, but they do not by
 themselves make a 1000-conversation backfill cheap. Ordinary metrics polling,

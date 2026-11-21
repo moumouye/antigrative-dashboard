@@ -1,7 +1,7 @@
 # 本地 Token 账本与用量核算规范 (Local Token Usage Spec)
 
 本文档定义 Antigravity Pulse（Desktop 与 IDE）的本地 Token 账本核算口径、子代理递归聚合模型、配额优先级矩阵与内存安全预算。
-代码实现（`sidecars/panel/usage.mjs`、`sidecars/panel/task-usage.mjs`、`sidecars/panel/delegation.mjs`）必须严格遵循本文档定义的代数法则与边界，严禁使用散文随意推演。
+核心实现位于 `sidecars/panel/usage.mjs`、`sidecars/panel/task-usage.mjs` 与 `sidecars/panel/delegation.mjs`。
 
 ---
 

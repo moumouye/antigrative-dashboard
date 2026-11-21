@@ -52,8 +52,7 @@ npm run ui:reload
 
 ## 4. 自动化无头渲染与端到端断言 (Headless UI Verification)
 
-本项目遵循**智能体零用户测试铁律 (Zero-User-Testing Mandate)**，严禁要求人类开发者或用户手动重启宿主走查界面。
-所有前端交互、Shadow DOM 样式与数据联动必须通过 CDP 自动化端到端脚本闭环验证：
+系统所有前端交互、Shadow DOM 样式与数据联动统一通过 CDP 自动化端到端脚本闭环验证：
 
 ```bash
 node tools/check-usage-ui-cdp.mjs
