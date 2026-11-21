@@ -47,7 +47,7 @@ const server=createServer(async(req,res)=>{
 await new Promise(r=>server.listen(preview?17913:0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
 if(preview){console.log('Side panel preview: '+base);await new Promise(()=>{});}
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
-const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:{headless:true});
+const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
 try{
  for(const mode of ['deferred','early-classic','opaque-iframe']){
   prefs={language:'en',revision:1};rate=38.7;

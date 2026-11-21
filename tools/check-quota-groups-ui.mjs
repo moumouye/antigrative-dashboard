@@ -42,7 +42,7 @@ const server=createServer(async(req,res)=>{
 await new Promise(resolve=>server.listen(preview?17919:0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`;
 if(preview){console.log('PR #28 preview (synthetic quota data): '+base+'/panel');await new Promise(()=>{});}
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
-const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:{headless:true});
+const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
 const errors=[],results=[];
 try{
  for(const mode of ['panel','inline','ide']){

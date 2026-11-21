@@ -10,7 +10,7 @@ const theme=await readFile(join(repo,'compat/theme.cjs'),'utf8');
 const i18n=await readFile(join(repo,'compat/i18n.cjs'),'utf8');
 const extract=s=>s.slice(s.indexOf('module.exports = ')+17).trim().replace(/;$/,'');
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
-const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:{headless:true});
+const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
 try{
  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.setContent('<style>body{margin:0;background:#161412;color:#eee}#chat{height:800px;overflow:auto}#chat p{margin:4px}#opener{position:fixed;bottom:15px;left:50px}</style><main id="chat"></main><button id="opener">Usage</button><div id="host"></div>');
@@ -39,9 +39,9 @@ try{
  assert.equal(await page.locator('#alert').isVisible(),true,'Actual missing token components are never hidden');
  await page.evaluate(()=>usageTest.update(usageFixture));
  const dialog=page.locator('#usage-dashboard');assert.equal(await dialog.getAttribute('aria-modal'),'true');
- await page.locator('#selection-details').focus();await page.keyboard.press('Tab');assert.equal(await page.locator('#locale').evaluate(n=>n.getRootNode().activeElement===n),true);
+ await page.locator('#selection-details').focus();await page.keyboard.press('Tab');assert.equal(await page.locator('#refresh').evaluate(n=>n.getRootNode().activeElement===n),true);
  await page.keyboard.press('Shift+Tab');assert.equal(await page.locator('#selection-details').evaluate(n=>n.getRootNode().activeElement===n),true);
- await page.evaluate(()=>document.getElementById('opener').focus());assert.equal(await page.locator('#locale').evaluate(n=>n.getRootNode().activeElement===n),true,'Background script cannot steal focus');
+ await page.evaluate(()=>document.getElementById('opener').focus());assert.equal(await page.locator('#selection-details').evaluate(n=>n.getRootNode().activeElement===n),true,'Background script cannot steal focus');
  assert.equal(await page.evaluate(()=>{const event=new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:100});document.getElementById('chat').dispatchEvent(event);return event.defaultPrevented;}),true,'Background scrolling stays blocked');
  await page.keyboard.press('Escape');assert.equal(await dialog.evaluate(n=>n.open),false);assert.equal(await page.locator('#opener').evaluate(n=>document.activeElement===n),true);
  await page.evaluate(()=>usageTest.open(usageFixture,document.getElementById('opener')));await page.mouse.click(10,10);

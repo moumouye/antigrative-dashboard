@@ -1,6 +1,6 @@
 // Shared local usage views. Values and model labels are inserted as text.
 module.exports = function createUsageDashboard({root,language,setMarkup,hostLabel='Antigravity',guideDismissed=false,onDismissGuide,onLanguage,onRefresh}) {
-  const dialog=document.createElement('dialog');dialog.id='usage-dashboard';
+  const dialog=document.createElement('dialog');dialog.id='usage-dashboard';dialog.setAttribute('aria-modal','true');
   dialog.style.cssText='width:min(1040px,calc(100vw - 40px));max-width:none;height:fit-content;max-height:min(820px,calc(100dvh - 64px));box-sizing:border-box;overflow:hidden;visibility:visible;pointer-events:auto;padding:0;border:1px solid var(--pulse-border);border-radius:18px;background:var(--pulse-background);color:var(--pulse-foreground);box-shadow:0 24px 100px #0006';
   const shell=document.createElement('div'),view=shell.attachShadow({mode:'open'});shell.style.height='100%';dialog.append(shell);root.append(dialog);
   const backdrop=document.createElement('style');backdrop.textContent='#usage-dashboard::backdrop{background:#0006;backdrop-filter:blur(3px)}';root.append(backdrop);
@@ -1008,10 +1008,12 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     $('overview-tab').setAttribute('aria-selected',String(tab==='overview'));$('details-tab').setAttribute('aria-selected',String(tab==='details'));$('overview').hidden=tab!=='overview';$('details').hidden=tab!=='details';
     renderTotals();
     text('coverage',w(`已记录 ${full(value.requests)} 次请求${value.firstDate?' · 始于 '+value.firstDate:''}`,`${full(value.requests)} requests recorded${value.firstDate?' · since '+value.firstDate:''}`));
-    text('timezone',value.timeZone+' · '+(value.syncing?w('正在同步…','Syncing…'):w('本地统计','Local usage')));
+    text('timezone',value.timeZone+' · '+(value.syncing||value.retryingConversations>0?w('正在同步历史…','Syncing history…'):w('本地统计','Local usage')));
     const alerts=[];
     if(value.unreadableFiles)alerts.push(w(`${value.unreadableFiles} 个账本文件无法读取，可重启插件重试`,`${value.unreadableFiles} ledger files could not be read; restart the plugin to retry`));
-    if(value.missingConversations)alerts.push(w(`${value.missingConversations} 个历史对话暂不可读取，会自动重试`,`${value.missingConversations} conversations are temporarily unavailable and will retry`));
+    const confirmedMissing=value.confirmedMissingConversations??(value.syncing?0:value.missingConversations);
+    if(confirmedMissing>0&&!value.syncing)alerts.push(w(`${confirmedMissing} 个历史对话暂不可读取，会自动重试`,`${confirmedMissing} conversations are temporarily unavailable and will retry`));
+    if(value.partialRequests)alerts.push(w(`${value.partialRequests} 条历史记录字段不完整，用量可能不精确`,`${value.partialRequests} historical records were incomplete; usage may be incomplete`));
     if(value.persistenceError)alerts.push(w('用量暂时无法写入本地账本','Usage cannot be written to the local ledger'));
     $('alert').hidden=!alerts.length;text('alert',alerts.join(' · '));
     // Incomplete historical rows are expected and already counted from their
@@ -1074,14 +1076,39 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     }
   });
   function close(){stopLive();dialog.close();$('tip').hidden=true;opener?.focus({preventScroll:true});}
-  $('close').addEventListener('click',close);dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)close();}});
+  $('close').addEventListener('click',close);dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
+  const within=event=>event.composedPath().includes(dialog);
+  function containFocus(event){if(!disposed&&dialog.open&&!within(event)){$('refresh').focus({preventScroll:true});}}
+  function containKeys(event){
+    if(disposed||!dialog.open)return;
+    if(event.key!=='Tab')return;
+    const controls=[...view.querySelectorAll('button,input,select,a[href],[tabindex]')].filter(n=>n.tabIndex>=0&&!n.disabled&&n.getClientRects().length&&getComputedStyle(n).visibility!=='hidden');
+    if(!controls.length)return;
+    const first=controls[0],last=controls[controls.length-1];
+    if(event.shiftKey&&view.activeElement===first){event.preventDefault();last.focus({preventScroll:true});}
+    else if(!event.shiftKey&&view.activeElement===last){event.preventDefault();first.focus({preventScroll:true});}
+  }
+  function containScroll(event){if(!disposed&&dialog.open&&!within(event))event.preventDefault();}
+  function containPointer(event){
+    if(disposed||!dialog.open)return;
+    const r=dialog.getBoundingClientRect();
+    const backdropHit=event.composedPath()[0]===dialog;
+    if(!within(event)||backdropHit&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)){
+      event.preventDefault();event.stopImmediatePropagation();if(event.type==='click')close();
+    }
+  }
+  document.addEventListener('focusin',containFocus,true);
+  document.addEventListener('keydown',containKeys,true);
+  document.addEventListener('wheel',containScroll,{capture:true,passive:false});
+  document.addEventListener('touchmove',containScroll,{capture:true,passive:false});
+  for(const type of ['pointerdown','mousedown','click'])document.addEventListener(type,containPointer,true);
   const contentKey=data=>JSON.stringify([{...data,updatedAt:undefined},language.language,themeSignature()]);
   const themeObserver=new MutationObserver(()=>{if(!disposed&&value&&dialog.open){const key=contentKey(value);if(key!==lastKey){lastKey=key;render();}}});
   if(root.host)themeObserver.observe(root.host,{attributes:true,attributeFilter:['data-pulse-theme','style']});
   const api={open(data,trigger){if(!data||disposed)return;tab='overview';accountKey=data.accountKey;value=data;opener=trigger;selectedDay=data.today;periodAnchors.day=data.today;periodAnchors.week=data.today;periodAnchors.month=data.today;focusedBucket=null;for(const m of userDismissedModels)disabledModels.add(m);lastKey=contentKey(data);render();if(!dialog.open)dialog.showModal();startLive();},
     update(data){if(disposed)return;if(!data){if(!value)return;value=null;lastKey='';if(dialog.open)render();return;}const prevToday=value?.today;if(accountKey&&accountKey!==data.accountKey){selected=null;selectedDay=data.today;disabledModels.clear();for(const m of userDismissedModels)disabledModels.add(m);focusedBucket=null;periodAnchors.day=data.today;periodAnchors.week=data.today;periodAnchors.month=data.today;}else if(prevToday&&prevToday!==data.today){selectedDay=data.today;for(const p of ['day','week','month'])if(!periodAnchors[p]||periodAnchors[p]>=prevToday)periodAnchors[p]=data.today;}accountKey=data.accountKey;value=data;if(!dialog.open)return;const key=contentKey(data);if(key===lastKey)return;lastKey=key;render();},
     restoreModal(){if(!disposed&&dialog.open&&dialog.isConnected&&!dialog.matches(':modal')){dialog.close();dialog.showModal();}},
-    close,syncGuideDismissed(){if(!replayGuide)dismissGuide();},dispose(){disposed=true;stopLive();themeObserver.disconnect();clearTimeout(refreshDelay);finishRefresh?.();refreshMotion?.cancel();dialog.close();dialog.remove();backdrop.remove();},get isOpen(){return dialog.open;}};
+    close,syncGuideDismissed(){if(!replayGuide)dismissGuide();},dispose(){disposed=true;stopLive();document.removeEventListener('focusin',containFocus,true);document.removeEventListener('keydown',containKeys,true);document.removeEventListener('wheel',containScroll,true);document.removeEventListener('touchmove',containScroll,true);for(const type of ['pointerdown','mousedown','click'])document.removeEventListener(type,containPointer,true);themeObserver.disconnect();clearTimeout(refreshDelay);finishRefresh?.();refreshMotion?.cancel();dialog.close();dialog.remove();backdrop.remove();},get isOpen(){return dialog.open;}};
   function applyUpdate(data){api.update(data);}
   let liveTimer=null,liveBusy=false;
   // The host already polls every ~2s, but a long background collection can

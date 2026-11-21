@@ -71,7 +71,7 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
 const errors=[],results=[];let browser;
 try {
-  browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:{headless:true});
+  browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
   const origin='http://127.0.0.1:'+server.address().port;
   for(const mode of ['inline','ide','panel'].filter(value=>!process.env.PULSE_TASK_UI_MODE||process.env.PULSE_TASK_UI_MODE===value)) {
     const inline=mode!=='panel';preference={language:'en',languageGuideDismissed:true,revision:1};collection=null;
