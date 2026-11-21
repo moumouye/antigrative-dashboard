@@ -21,7 +21,7 @@
 
 | 变更源码路径 | 核心业务领域 | 必须同步更新的规范文档 | 核心关注点 |
 | :--- | :--- | :--- | :--- |
-| `sidecars/panel/metrics.mjs` | 生成速率与耗时模型 | [`docs/TPS.md`](docs/TPS.md) | Median / MAD 过滤算法、Thinking 与 TTFT 剥离准则 |
+| `sidecars/panel/metrics.mjs` | 生成速率与耗时模型 | [`docs/TPS.md`](docs/TPS.md) | Median / MAD 过滤算法、全量输出吞吐口径与 TTFT 剥离准则 |
 | `sidecars/panel/usage.mjs` | Token 账本与子代理核算 | [`docs/USAGE.md`](docs/USAGE.md) | 设备级账本聚合、多层子代理扣除、Cache 命中率公式 |
 | `sidecars/panel/pricing.mjs` | 离线计费与模型窗口 | [`docs/CONTEXT_LIMITS.md`](docs/CONTEXT_LIMITS.md) | Gemini 模型容量、输入预算与压缩预警阈值 |
 | `sidecars/panel/usage-disk-worker.mjs` | 超长轨迹持久化 | [`docs/LONG_CONVERSATIONS.md`](docs/LONG_CONVERSATIONS.md) | 8MB 内存上限、SQLite 异步切片读写协议 |
@@ -74,7 +74,7 @@ node tools/local-gate.mjs               # 零依赖全量，约 30s
 * 系统总图谱：[`ARCHITECTURE.md`](ARCHITECTURE.md)
 * 架构物理红线：[`docs/boundaries.md`](docs/boundaries.md)
 * 接口与注入契约：[`docs/contracts.md`](docs/contracts.md)
-* 避坑与暗知识：[`docs/anti-patterns.md`](docs/anti-patterns.md)
+* 架构反模式与防御规范：[`docs/anti-patterns.md`](docs/anti-patterns.md)
 * 质量验收门禁：[`docs/verification.md`](docs/verification.md)
 * 全版本演进流：[`CHANGELOG.md`](CHANGELOG.md)
 

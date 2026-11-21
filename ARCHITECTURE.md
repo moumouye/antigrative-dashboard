@@ -16,7 +16,7 @@ flowchart TD
     subgraph Layer1 ["第一层：工程治理与物理红线 (Governance Invariants)"]
         Doc1["<b>① 边界与红线 (Boundaries)</b><br/><code>docs/boundaries.md</code><br/>宿主安全、数据隐私与模块不可逾越红线"]
         Doc2["<b>② 契约与流向 (Contracts)</b><br/><code>docs/contracts.md</code><br/>渲染注入、跨进程 IPC、安装引导与版本发布契约"]
-        Doc3["<b>③ 否决与避坑档案 (Anti-Patterns)</b><br/><code>docs/anti-patterns.md</code><br/>暗知识档案：实测被否决的方案与失效根因剖析"]
+        Doc3["<b>③ 架构反模式与防御规范 (Anti-Patterns)</b><br/><code>docs/anti-patterns.md</code><br/>系统反模式识别、架构风险分析与规范防御标准"]
         Doc4["<b>④ 质量验收门禁 (Verification)</b><br/><code>docs/verification.md</code><br/>自动化门禁、物理不变量断言与反向防倒退锁"]
     end
 
@@ -105,7 +105,7 @@ flowchart TD
 | :--- | :--- | :--- |
 | [`docs/boundaries.md`](docs/boundaries.md) | 架构物理红线、沙箱隔离、数据隐私边界 | 涉及文件系统、外部网络、跨平台兼容性设计时 |
 | [`docs/contracts.md`](docs/contracts.md) | Webview 注入协议、打包清单、安装与发布协议 | 接口调整、渲染管道变更、版本发布时 |
-| [`docs/anti-patterns.md`](docs/anti-patterns.md) | 实测已否决方案、技术陷阱与失效根因记录 | 技术选型、避免重蹈覆辙时必查 |
+| [`docs/anti-patterns.md`](docs/anti-patterns.md) | 架构反模式与防御规范、系统性风险与标准解法 | 架构设计、选型审查与防风险回退时必查 |
 | [`docs/verification.md`](docs/verification.md) | 质量门禁矩阵、CDP 自动化、四大物理不变量 | 任何代码提交、发版、缺陷反向断言维护前 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 全版本演进与发布记录 | 追溯特定版本功能特性与修复流水 |
 | [`COMPATIBILITY.md`](COMPATIBILITY.md) | 跨平台系统矩阵与运行环境规范 | 查阅支持的操作系统、宿主版本与数据目录时 |
