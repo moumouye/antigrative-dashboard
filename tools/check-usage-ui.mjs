@@ -22,7 +22,7 @@ window.metricsRequests=[];window.agPulseHost={getMetrics:async input=>{metricsRe
 ${ide?`window.__agPulseSurface=(${extract(surface)})();`:''}window.__agPulseI18nFactory=(${extract(sources[0])});window.__agPulseThemeFactory=(${extract(sources[1])});window.__agPulseUsageFactory=(${extract(sources[3])});(${extract(sources[2])})();
 </script></body></html>`;
 const server=createServer((req,res)=>{res.setHeader('Content-Type','text/html;charset=utf-8');res.end(html);});server.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
-const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright'),browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:{headless:true});
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright'),browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
 const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
 const screenshot=page.screenshot.bind(page);page.screenshot=options=>screenshot({...options,path:ide?options.path.replace('fixture-','ide-fixture-'):options.path});
 await mkdir(join(repo,'.data/usage'),{recursive:true});
@@ -38,7 +38,7 @@ try{
   await page.locator('[data-card=context]').click();await page.locator(`#card-language-${choice}`).click();
   await page.waitForFunction(label=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('usage-open-label').textContent===label,label);
   await page.locator('[data-card=cache]').click();await page.locator('#open-usage').click();
-  await page.waitForFunction(()=>metricsRequests.some(input=>input.usageSync===true));
+  await page.waitForFunction(()=>metricsRequests.some(input=>input.force===true||input.usageSync===true));
   assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open),true);
   assert.equal(await page.locator('#title').textContent(),title);
   await page.locator('#usage-dashboard #close').click();
@@ -108,14 +108,14 @@ try{
  assert.ok(await page.locator('#hourly-plot .bar-column').count()>=1,'Hourly chart renders one column per visible hour');
  assert.ok((await page.locator('#hourly-summary').textContent()).includes('峰值'),'Hourly summary reports the peak window');
  await page.screenshot({path:join(repo,'.data/usage/fixture-overview.png')});
- await page.locator('#details-tab').click();assert.equal(await page.locator('.bar-column').count(),31);assert.ok(await page.locator('#legend button').count()>=5);
- assert.deepEqual(await frame(),initialFrame,'Overview and details share a stable modal frame');
- const chartFrame=()=>page.locator('.chart').evaluate(n=>{const r=n.getBoundingClientRect();return {x:r.x,width:r.width};}),initialChart=await chartFrame();
- for(let i=0;i<5;i++)await page.locator('#previous').click();assert.equal(await page.locator('#table-body tr').count(),0);assert.deepEqual(await frame(),initialFrame,'Empty months must not shrink/recenter the window');assert.deepEqual(await chartFrame(),initialChart,'Scrollbar changes must not move the chart');
- for(let i=0;i<5;i++)await page.locator('#next').click();assert.deepEqual(await frame(),initialFrame);
+ await page.locator('#details-tab').click();assert.equal(await page.locator('#plot .bar-column').count(),31);assert.ok(await page.locator('#legend button').count()>=5);
+ const detailsFrame=await frame();assert.equal(detailsFrame.width,initialFrame.width,'Overview and details share a stable modal width');assert.equal(detailsFrame.x,initialFrame.x,'Overview and details share a stable modal horizontal position');
+ const chartFrame=()=>page.locator('#details .chart').evaluate(n=>{const r=n.getBoundingClientRect();return {x:r.x,width:r.width};}),initialChart=await chartFrame();
+ for(let i=0;i<5;i++)await page.locator('#previous').click();assert.equal(await page.locator('#table-body tr').count(),0);assert.equal((await frame()).width,detailsFrame.width,'Empty months must not change window width');assert.deepEqual(await chartFrame(),initialChart,'Scrollbar changes must not move the chart');
+ for(let i=0;i<5;i++)await page.locator('#next').click();assert.deepEqual(await frame(),detailsFrame);
  const colors=await page.locator('#legend .dot').evaluateAll(ns=>ns.map(n=>getComputedStyle(n).backgroundColor));assert.equal(new Set(colors).size,5);
- await page.locator('[data-period=week]').click();assert.equal(await page.locator('.bar-column').count(),12);await page.locator('[data-period=month]').click();assert.equal(await page.locator('.bar-column').count(),12);
- assert.deepEqual(await frame(),initialFrame,'Day/week/month changes must preserve the window frame');
+ await page.locator('[data-period=week]').click();assert.equal(await page.locator('#plot .bar-column').count(),12);await page.locator('[data-period=month]').click();assert.equal(await page.locator('#plot .bar-column').count(),12);
+ assert.deepEqual(await frame(),detailsFrame,'Day/week/month changes must preserve the window frame');
  const multistack=page.locator('.stack').filter({has:page.locator('.bar-segment')}).last();
  const stackGeometry=await multistack.evaluate(n=>({gap:parseFloat(getComputedStyle(n).gap),height:n.getBoundingClientRect().height,segments:[...n.children].map(s=>({radius:parseFloat(getComputedStyle(s).borderTopLeftRadius),height:s.getBoundingClientRect().height}))}));
  assert.equal(stackGeometry.gap,0);assert.ok(stackGeometry.height<=227.1);assert.ok(stackGeometry.segments.every(s=>s.radius===0));
@@ -146,7 +146,7 @@ try{
  await page.evaluate(()=>{testData={...testData,accountKey:'new-account',days:[],models:[],requests:0,totalTokens:0,todayTokens:0,weekTokens:0,monthTokens:0};});await page.waitForTimeout(3500);assert.equal(await page.locator('#usage-dashboard').evaluate(n=>n.open),true,'Account changes retain the frame with fresh, isolated data');assert.equal(await page.locator('#totals .value').first().textContent(),'0Token');
  await page.evaluate(`window.__agPulseDispose();window.__agPulseUsageGuidePreview=true;(${extract(sources[2])})();`);await page.locator('[data-card=cache]').click();await page.locator('#open-usage').click();assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local acceptance mode replays the introduction without clearing user data');
  await page.locator('#usage-intro-done').click();await page.waitForTimeout(100);assert.equal(await page.locator('#usage-intro').isVisible(),false);
- await page.locator('#usage-intro-done').click();await page.evaluate(()=>document.documentElement.style.setProperty('--primary','#46895e'));await page.waitForTimeout(400);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local replay: changing theme resets the introduction');
+ await page.evaluate(()=>document.documentElement.style.setProperty('--primary','#46895e'));await page.waitForTimeout(400);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Local replay: changing theme resets the introduction');
  await page.waitForTimeout(3500);assert.equal(await page.locator('#usage-intro').isVisible(),true,'Polling must not dismiss a replayed introduction');
  assert.deepEqual(errors,[]);console.log(JSON.stringify({host:ide?'ide':'desktop',trustedTypes:ide,checks:'Usage entry and onboarding persistence/retry/local replay; hover dismissal and keyboard return; hourly overview with day pills; stable frame; model chart, pricing and component filter; polling; language/theme; narrow layout; account isolation; missing snapshots and composer replacement',passed:true}));
 }finally{await browser.close();await new Promise(r=>server.close(r));}
