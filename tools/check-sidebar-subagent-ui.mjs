@@ -99,7 +99,7 @@ try{
    await page.evaluate(()=>switchChild());await expectMetrics('70.0','46%');
    await strip.locator('[data-card=cache]').click();await strip.locator('#open-usage').click();
    assert.equal(await strip.locator('#usage-dashboard').evaluate(element=>element.open),true,'Sidebar usage entry opens');
-   await page.waitForFunction(()=>calls.some(call=>call.usageSync===true&&call.conversationId===ids.other));
+   await page.waitForFunction(()=>calls.some(call=>call.force===true&&call.conversationId===ids.other));
    await strip.locator('#usage-dashboard #close').click();
    await strip.locator('[data-card=context]').click();
    assert.equal(await strip.getAttribute('lang'),lang==='en'?'en':'zh-CN','Opening usage and context must preserve language');

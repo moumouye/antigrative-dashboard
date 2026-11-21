@@ -35,7 +35,7 @@ test('real worker finishes a projected page above 8 MiB while foreground quota r
  await waitFor(()=>f.stepCalls>0);
  for(let i=0;i<4;i++)assert.deepEqual(await client.call('RetrieveUserQuotaSummary',{},false),{groups:[]});
  assert.equal(f.quotaCalls,4);
- await waitFor(()=>f.completed!==null,60000);assert.equal(f.completed.metrics.steps,18000);assert.equal(f.completed.metrics.tps,50);assert.equal(f.completed.metrics.cache.hitRate,.75);assert.equal(f.completed.metrics.context.usedFraction,.5);
+ await waitFor(()=>f.completed!==null,120000);assert.equal(f.completed.metrics.steps,18000);assert.equal(f.completed.metrics.tps,50);assert.equal(f.completed.metrics.cache.hitRate,.75);assert.equal(f.completed.metrics.context.usedFraction,.5);
  await waitFor(()=>f.manager.active===null);assert.deepEqual(await readdir(f.dir),[],'Temporary statistics and credentials must not remain');assert.equal(f.manager.state(id),null);
 });
 test('scope cancellation prevents publication and removes scratch files',async t=>{

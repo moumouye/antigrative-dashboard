@@ -80,7 +80,7 @@ $$\Delta t_{\text{stream}} = \frac{1}{1000} \cdot \mu\left(\bigcup_{k} [t_{k,\te
 
 ### 界面说明与细分呈现契约
 * **速率说明注脚**：在指标卡片底部明确声明统计口径为 `统计方式：全量输出 Token ÷ 流式时长；会话 TPS 按总时长加权。`；
-* **正文与思考细分呈现**：虽然 TPS 分子采用全量输出，但在数据结构与界面展示上，仍通过 `counts.responseOutput` 与 `counts.thinkingOutput` 分别保留正文 Token 与思考 Token 的独立统计（如 `正文 / 思考输出: 34,922 / 68,041 tok`）。
+* **正文与思考细分呈现**：虽然 TPS 分子采用全量输出，但在数据结构与界面展示上，仍通过 `counts.responseOutput` 与 `counts.thinkingOutput` 分别保留正文 Token 与思考 Token 的独立统计（如 `正文与思考输出: 34,922 / 68,041 tok`）。
 
 ---
 
