@@ -203,7 +203,16 @@ export async function discoverProcesses({ platform = process.platform, run = exe
     if(!rows.length)return [];
     const {stdout:sockets}=await run('/usr/sbin/lsof',['-nP','-a','-p',rows.map(r=>r.ProcessId).join(','),'-iTCP','-sTCP:LISTEN','-Fpn'],{timeout:8000,maxBuffer:1048576}).catch(error=>{if(error.code===1)return {stdout:error.stdout||''};throw error;});
     const ports=parseLsof(sockets);
-    return rows.map(row=>({...row,Ports:ports.get(row.ProcessId)||[]}));
+    for (const r of rows) {
+      if (!r.CommandLine.includes('--csrf_token')) {
+        try {
+          const {stdout: envOut} = await run('/bin/ps', ['eww', '-p', String(r.ProcessId)]);
+          const m = envOut.match(/ANTIGRAVITY_SERVER_CSRF_TOKEN=([^\s]+)/);
+          if (m) r.CsrfToken = m[1];
+        } catch {}
+      }
+    }
+    return rows.map(row=>({...row,Ports:ports.get(row.ProcessId)||[],CsrfToken:row.CsrfToken||null}));
   }
   if (platform === 'linux') {
     const rows=[];
@@ -213,7 +222,15 @@ export async function discoverProcesses({ platform = process.platform, run = exe
         if(Number(status.match(/^Uid:\s+(\d+)/m)?.[1])!==uid)continue;
         const command=(await readFile(join(proc,pid,'cmdline'),'utf8')).split('\0').filter(Boolean).join(' ');
         if(!languageServer(command)||!/--standalone\b/.test(command))continue;
-        rows.push({ProcessId:Number(pid),CommandLine:command,Ports:await linuxPorts(pid,{proc})});
+        let csrfToken = null;
+        if (!command.includes('--csrf_token')) {
+          try {
+            const environ = await readFile(join(proc,pid,'environ'),'utf8');
+            const m = environ.match(/ANTIGRAVITY_SERVER_CSRF_TOKEN=([^\0]+)/);
+            if (m) csrfToken = m[1];
+          } catch {}
+        }
+        rows.push({ProcessId:Number(pid),CommandLine:command,Ports:await linuxPorts(pid,{proc}),CsrfToken:csrfToken});
       } catch { /* Processes can exit during discovery; inaccessible processes are not candidates. */ }
     }
     return rows;

@@ -13,7 +13,7 @@ function serverFromPorts(logPorts, processes) {
   const ports = new Set([rows[0].Ports].flat().map(Number));
   const port = logPorts.find(p=>ports.has(p));
   if (!port) throw new Error('等待 Antigravity 本地接口启动');
-  const csrf = rows[0].CommandLine.match(/--csrf_token(?:=|\s+)"?([^\s"]+)/)?.[1];
+  const csrf = rows[0].CsrfToken || rows[0].CommandLine.match(/--csrf_token(?:=|\s+)"?([^\s"]+)/)?.[1];
   if (!csrf) throw new Error('当前版本未提供可用的本地检测凭据');
   return {port,csrf,pid:rows[0].ProcessId};
 }
