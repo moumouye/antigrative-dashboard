@@ -235,7 +235,7 @@ module.exports = function installAgPulseInlineWidget() {
     const fits=()=>{
       const rect=node.getBoundingClientRect(),row=composer.row.getBoundingClientRect();
       const intersects=other=>Math.min(rect.right,other.right)-Math.max(rect.left,other.left)>4&&Math.min(rect.bottom,other.bottom)-Math.max(rect.top,other.top)>4;
-      if(bar.scrollWidth>bar.clientWidth+6||rect.width<=0||rect.left< -1||rect.right>innerWidth+1||rect.top< -1||rect.bottom>innerHeight+1||rect.left<row.left-1||rect.right>row.right+1)return false;
+      if(bar.scrollWidth>bar.clientWidth+2||rect.width<=0||rect.left< -1||rect.right>innerWidth+1||rect.top< -1||rect.bottom>innerHeight+1||rect.left<row.left-1||rect.right>row.right+1)return false;
       if(!nativeComfortable())return false;
       if(composer.kind==='subagent'&&intersects(composer.anchor.getBoundingClientRect()))return false;
       for(const control of document.querySelectorAll('button,[role="button"],a[href],input,select,[contenteditable="true"]')){

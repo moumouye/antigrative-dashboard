@@ -50,7 +50,7 @@ async function verifyCurrent(page,generation){
  assert.equal(await count(page),1);
 }
 try{
- browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:{headless:true});
+ browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
  const base=`http://127.0.0.1:${server.address().port}`;
  for(const name of ['deferred-preferences','queued-layout-and-repeated-replacements','no-composer-retired-instance','orphan-recovery']){
   const page=await browser.newPage({viewport:{width:1280,height:900}});page.on('pageerror',e=>errors.push(e.message));

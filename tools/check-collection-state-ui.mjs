@@ -23,7 +23,7 @@ const server=createServer((req,res)=>{if(req.url==='/widget.js'){res.setHeader('
 await new Promise(r=>server.listen(preview?17918:0,'127.0.0.1',r));
 if(preview){console.log('Synthetic collection preview: http://127.0.0.1:17918/?lang=zh-CN');await new Promise(()=>{});}
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
-const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:{headless:true});
+const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
 const errors=[],results=[];
 try{for(const lang of ['en','zh-CN','zh-TW']){
  const page=await browser.newPage({viewport:{width:1280,height:1000}});page.on('pageerror',e=>errors.push(e.message));
