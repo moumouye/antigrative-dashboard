@@ -1,5 +1,9 @@
 # Changelog
 
+English | [简体中文](CHANGELOG.zh-CN.md)
+
+---
+
 ## 0.8.20 — 2026-11-21
 
 - Align TPS throughput metrics by factoring both reasoning and response tokens into the output numerator against the total streaming duration.
