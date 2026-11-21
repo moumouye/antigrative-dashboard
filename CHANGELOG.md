@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.20 — 2026-11-21
+
+- Align TPS throughput metrics by factoring both reasoning and response tokens into the output numerator against the total streaming duration.
+- Clarify token presentation in the status bar and side panel to eliminate ambiguous division slash formatting between message and thinking tokens.
+- Support Antigravity v2.34.0+ environment variable CSRF credential passing for background process discovery.
+- Harden modal dialog accessibility with explicit `aria-modal="true"` and Shadow DOM Tab focus cycling, preventing focus escape in headless verification.
+- Strengthen cross-platform CI verification gates across macOS, Linux, and Windows with resilient browser executable detection and fallback handling.
+
 ## 0.8.19 — 2026-11-06
 
 - Establish canonical master repository at `moumouye/antigrative-dashboard`.
