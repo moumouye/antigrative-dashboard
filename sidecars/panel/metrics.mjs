@@ -112,14 +112,14 @@ export function trajectoryMetrics(response, storage = null) {
     if (parts.some(([, ,value])=>value!==null) || output !== null) tokens.measuredRequests++;
     const visible = tokenCount(usage.responseOutputTokens);
     const thinking = tokenCount(usage.thinkingOutputTokens);
-    // Gemini may finish thinking before the first visible streaming token. Pair the
-    // response token count with streamingDuration; do not charge thinking to that span.
-    const responseTokens = visible ?? (output !== null && thinking !== null ? Math.max(0, output - thinking) : output);
+    const totalOutput = output !== null ? output : (visible !== null || thinking !== null ? (visible ?? 0) + (thinking ?? 0) : null);
+    const visibleTokens = visible ?? (output !== null && thinking !== null ? Math.max(0, output - thinking) : output);
+    const rateTokens = totalOutput !== null ? totalOutput : visibleTokens;
     const duration = seconds(chat.streamingDuration);
     const ttft = seconds(chat.timeToFirstToken);
     counts.input += tokenCount(usage.inputTokens) ?? 0;
     counts.output += output ?? 0;
-    counts.responseOutput += responseTokens ?? 0;
+    counts.responseOutput += visibleTokens ?? 0;
     counts.thinkingOutput += thinking ?? 0;
     counts.cacheRead += tokenCount(usage.cacheReadTokens) ?? 0;
     counts.cacheWrite += tokenCount(usage.cacheWriteTokens) ?? 0;
@@ -139,8 +139,8 @@ export function trajectoryMetrics(response, storage = null) {
     const toolOnly = planners.length > 0 && planners.every(step=>step.plannerResponse?.toolCalls?.length > 0 &&
       !String(step.plannerResponse?.response || '').trim());
     const basis = visible !== null || thinking !== null ? 'response' : 'all-output';
-    const sample = { responseTokens, duration, ttft, reasons, toolOnly,
-      tps: responseTokens !== null && duration > 0 ? responseTokens / duration : null,
+    const sample = { responseTokens: rateTokens, duration, ttft, reasons, toolOnly,
+      tps: rateTokens !== null && duration > 0 ? rateTokens / duration : null,
       model: chat.modelDisplayName || chat.responseModel || String(chat.model || usage.model || ''), basis,
       profile: JSON.stringify([usage.apiProvider || '',chat.responseModel || usage.model || chat.model || chat.modelDisplayName || '',basis]) };
     samples.push(sample);

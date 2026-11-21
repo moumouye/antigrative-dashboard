@@ -58,7 +58,7 @@ try{
  await page.evaluate(quality=>{testQuality=quality;},quality);
  await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('latest-rate').textContent==='Timing uncertain');
  await page.keyboard.press('Escape');await page.locator('[data-card=speed]').click();
- assert.equal(await page.locator('#rate-note').textContent(),'Calculation: response tokens ÷ streaming time; session TPS is time-weighted.');
+ assert.equal(await page.locator('#rate-note').textContent(),'Calculation: total output tokens ÷ streaming time; session TPS is time-weighted.');
  assert.equal(await page.locator('#tps').textContent(),'—');
  await page.screenshot({path:join(repo,'.data/ide/tps-quality-en.png')});
  await page.evaluate(()=>{testQuality=null;});
@@ -67,7 +67,7 @@ try{
  await page.locator('[data-card=context]').click();await page.locator('#card-language-zh').click();await page.waitForTimeout(150);assert.equal((await state()).lang,'zh-CN');assert.equal(await page.locator('#transcript-details').count(),0);await page.keyboard.press('Escape');
  await page.evaluate(quality=>{testQuality=quality;},quality);
  await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar').shadowRoot.getElementById('latest-rate').textContent==='计时异常');
- await page.locator('[data-card=speed]').click();assert.equal(await page.locator('#rate-note').textContent(),'统计方式：正文 Token ÷ 流式时长；会话 TPS 按总时长加权。');
+ await page.locator('[data-card=speed]').click();assert.equal(await page.locator('#rate-note').textContent(),'统计方式：全量输出 Token ÷ 流式时长；会话 TPS 按总时长加权。');
  await page.screenshot({path:join(repo,'.data/ide/tps-quality-zh.png')});await page.keyboard.press('Escape');await page.evaluate(()=>{testQuality=null;});
  // A different child/subagent/history ID must never win over the input owner.
  await page.evaluate(other=>{const decoy={props:{cascadeId:other},__k:[]};testOwner.__k.unshift(decoy);},other);

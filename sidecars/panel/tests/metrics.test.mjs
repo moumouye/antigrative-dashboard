@@ -6,16 +6,16 @@ import { MetricsStore } from '../store.mjs';
 
 const chat = (id, tokens, duration, thinking = '100') => ({ chatModel: { usage: { messageId: id, inputTokens:'1000', outputTokens:String(Number(tokens)+Number(thinking)), responseOutputTokens:String(tokens), thinkingOutputTokens:thinking }, streamingDuration:duration, timeToFirstToken:'2s' } });
 
-test('TPS uses visible response tokens and weights by stream time, excluding TTFT and thinking', () => {
+test('TPS uses total output tokens and weights by stream time, excluding TTFT', () => {
   const data = trajectoryMetrics({ trajectory:{ generatorMetadata:[chat('a',100,'1s'),chat('b',200,'4s')],steps:[] } });
-  assert.equal(data.tps,60); assert.equal(data.latestTps,50);
+  assert.equal(data.tps,100); assert.equal(data.latestTps,75);
   assert.equal(data.modelSeconds,9); assert.equal(data.ttftSeconds,2);
   assert.equal(data.counts.output,500); assert.equal(data.counts.responseOutput,300);
 });
 test('duplicate request metadata and missing/zero duration never inflate speed', () => {
   const a = chat('a',100,'2s');
   const data = trajectoryMetrics({ trajectory:{generatorMetadata:[a,a,chat('b',500,'0s'),chat('c',500,undefined)]} });
-  assert.equal(data.requests,3); assert.equal(data.measuredRequests,1); assert.equal(data.tps,50); assert.equal(data.missingTiming,2);
+  assert.equal(data.requests,3); assert.equal(data.measuredRequests,1); assert.equal(data.tps,100); assert.equal(data.missingTiming,2);
   assert.equal(trajectoryMetrics({trajectory:{}}).tps,null);
 });
 test('overlapping tool execution is counted once, including tools without toolCall metadata', () => {
