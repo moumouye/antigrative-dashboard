@@ -4,6 +4,12 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 ---
 
+## 0.8.21 — 2026-11-27
+
+- Add a shared, non-invasive loopback CDP bootstrap (`compat/cdp_bootstrap.py`) so desktop installations work automatically on recent Antigravity builds that disable remote debugging by default, without modifying `Antigravity.app` or `resources/app.asar`.
+- On macOS, automatically configure a one-shot login agent (`com.moumouye.antigravity-cdp`) with an active-session restart guard and build `/Applications/Antigravity Launcher.app`; on Windows, idempotently append `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1` to shortcuts with clean restoration on uninstall; on Linux, update user `.desktop` launch entries.
+- Coordinate multi-plugin installations (`antigravity-pulse`, `antigravity-font-settings`, `antigravity-timeline`) via shared consumer reference counting and schema downgrade protection, add `manage.py setup-cdp` and `cdpBootstrap` status reporting, and harden non-UTF8 (`cp1252`) Windows console logging.
+
 ## 0.8.20 — 2026-11-21
 
 - Align TPS throughput metrics by factoring both reasoning and response tokens into the output numerator against the total streaming duration.

@@ -4,6 +4,12 @@
 
 ---
 
+## 0.8.21 — 2026-11-27
+
+- **无侵入共享 CDP 引导**：新增跨插件共享引导模块（`compat/cdp_bootstrap.py`），在不修改 `Antigravity.app` 与 `resources/app.asar` 签名的前提下，适配新版 Antigravity 默认关闭 CDP 的机制。
+- **三端自动启动配置**：macOS 自动安装登录自启项（`com.moumouye.antigravity-cdp`，含当前会话防误杀守卫）与 `/Applications/Antigravity Launcher.app`；Windows 自动为桌面/开始菜单/任务栏快捷方式注入回环调试参数并配置登录自检守护；Linux 自动更新用户桌面入口。
+- **多插件共存与管理增强**：通过统一公共目录、`schemaVersion` 防降级与 `consumers.json` 引用计数确保多款 Antigravity 插件安全共存与无损卸载还原；新增 `manage.py setup-cdp` 修复命令及 `status` 状态输出，并兼容 Windows `cp1252` 非 UTF-8 控制台输出。
+
 ## 0.8.20 — 2026-11-21
 
 - **TPS 速率口径修正**：修正会话速率计算方式，将正文与思考 Token 全量计入速率分子，对齐模型总流式耗时，精准反映模型生成吞吐。

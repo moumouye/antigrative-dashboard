@@ -7,7 +7,7 @@
 **专为 Google Antigravity 打造的原生级性能与用量仪表盘**<br>
 无需离开对话界面，在模型选择栏旁实时掌控生成速率、缓存命中率、上下文占用与账号多维额度。
 
-[![Version 0.8.20](https://img.shields.io/badge/version-0.8.20-91adff?style=flat-square&labelColor=252936)](CHANGELOG.zh-CN.md)
+[![Version 0.8.21](https://img.shields.io/badge/version-0.8.21-91adff?style=flat-square&labelColor=252936)](CHANGELOG.zh-CN.md)
 [![Platforms](https://img.shields.io/badge/host-Windows%20%7C%20Linux%20%7C%20macOS-83d8b9?style=flat-square&labelColor=252936)](COMPATIBILITY.md)
 [![Antigravity 2.21.1 / 2.22.0](https://img.shields.io/badge/Antigravity-2.21.1%20%2F%202.22.0-c5a0ff?style=flat-square&labelColor=252936)](COMPATIBILITY.md)
 [![MIT](https://img.shields.io/badge/license-MIT-d4d9e6?style=flat-square&labelColor=252936)](LICENSE)
