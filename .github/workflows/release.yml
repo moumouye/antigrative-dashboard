@@ -79,7 +79,7 @@ jobs:
           python-version: '3.11'
       - name: Check version
         run: |
-          python -c "import json, os, sys; v=json.load(open('plugin.json'))['version']; sys.exit(0 if os.environ['GITHUB_REF_NAME']==f'v{v}' else f'Tag and plugin version differ: {v}')"
+          python -c "import json, os; v=json.load(open('plugin.json'))['version']; assert os.environ['GITHUB_REF_NAME']==f'v{v}', f'Tag and plugin version differ ({v})'"
       - name: Publish text-only release notes
         env:
           GH_TOKEN: ${{ github.token }}
