@@ -74,7 +74,12 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('node_modules/playwright/package.json') }}
-      - name: Install Chromium browser & OS deps
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium browser & verify shared libraries
+        run: |
+          npx playwright install chromium
+          if ! node -e "import('playwright').then(async ({chromium}) => { const b = await chromium.launch({headless: true}); await b.close(); })"; then
+            sudo rm -f /etc/apt/sources.list.d/*microsoft* || true
+            npx playwright install-deps chromium
+          fi
       - name: Run parallel Playwright UI regression gates
         run: node tools/run-ui-gates.mjs all
