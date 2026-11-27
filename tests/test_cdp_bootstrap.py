@@ -43,6 +43,16 @@ class CdpBootstrapTests(unittest.TestCase):
     def test_sandbox_never_reports_live_system(self):
         self.assertFalse(cdp._is_live_system(self.home, sys.platform))
 
+    def test_non_utf8_stdout_does_not_crash_bootstrap(self):
+        self._touch_plugin('antigravity-pulse')
+        cp1252_out = io.TextIOWrapper(io.BytesIO(), encoding='cp1252')
+        cp1252_err = io.TextIOWrapper(io.BytesIO(), encoding='cp1252')
+        with patch('sys.stdout', cp1252_out), patch('sys.stderr', cp1252_err):
+            res = cdp.ensure_cdp_bootstrap('antigravity-pulse', home=self.home, platform='win32', quiet=False)
+            rem = cdp.remove_cdp_bootstrap('antigravity-pulse', home=self.home, platform='win32', quiet=False)
+        self.assertEqual(res['action'], 'configured')
+        self.assertTrue(rem['removed'])
+
     def test_multi_plugin_refcounting_and_stale_consumer_pruning(self):
         self._touch_plugin('antigravity-pulse')
         self._touch_plugin('antigravity-font-settings')
