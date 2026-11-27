@@ -24,8 +24,9 @@ await new Promise(r=>server.listen(preview?17918:0,'127.0.0.1',r));
 if(preview){console.log('Synthetic collection preview: http://127.0.0.1:17918/?lang=zh-CN');await new Promise(()=>{});}
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
 const browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
-const errors=[],results=[];
-try{for(const lang of ['en','zh-CN','zh-TW']){
+const errors=[];
+try{await mkdir(join(repo,'.data/issue25-validation'),{recursive:true});
+ const results=await Promise.all(['en','zh-CN','zh-TW'].map(async lang=>{
  const page=await browser.newPage({viewport:{width:1280,height:1000}});page.on('pageerror',e=>errors.push(e.message));
  try{
  await page.goto(`http://127.0.0.1:${server.address().port}/?lang=${lang}`);
@@ -69,7 +70,7 @@ try{for(const lang of ['en','zh-CN','zh-TW']){
  await strip.locator('[data-card=context]').click();assert.equal(await strip.locator('#context-summary').textContent(),'—');assert.equal(await strip.locator('#five-balance').textContent(),'70.0%');
  await page.keyboard.press('Escape');await page.click('#theme');await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.getAttribute('data-pulse-theme')==='light');await strip.locator('[data-card=context]').click();assert.equal(await strip.locator('#context-card .collection-notice').isVisible(),true);
 
- await mkdir(join(repo,'.data/issue25-validation'),{recursive:true});await page.screenshot({path:join(repo,'.data/issue25-validation',`collection-${lang}.png`)});
- results.push({lang,limited:true,saved:true,fieldUnits:true,normalRecovery:true,narrow:true,quotaUnaffected:true,automaticBackgroundCompletion:true,processingSaved:true,processingNarrow:true});
+ await page.screenshot({path:join(repo,'.data/issue25-validation',`collection-${lang}.png`)});
+ return {lang,limited:true,saved:true,fieldUnits:true,normalRecovery:true,narrow:true,quotaUnaffected:true,automaticBackgroundCompletion:true,processingSaved:true,processingNarrow:true};
  }finally{await page.close();}
-}assert.deepEqual(errors,[]);console.log(JSON.stringify({results,pageErrors:errors},null,2));}finally{await browser.close();await new Promise(r=>server.close(r));}
+}));assert.deepEqual(errors,[]);console.log(JSON.stringify({results,pageErrors:errors},null,2));}finally{await browser.close();await new Promise(r=>server.close(r));}

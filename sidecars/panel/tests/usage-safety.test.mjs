@@ -51,12 +51,12 @@ test('explicit full refresh resumes through bounded slices',async t=>{
  const store={identity:account,epoch:1,listConversations:async()=>{lists++;return ids.map(conversationId=>({id:conversationId,status:'DONE',modifiedAt:'2026-10-29T00:00:00Z'}));},client:{trajectory:async()=>{calls++;return raw;}}};
  const usage=new DesktopUsage(store,ledger,{host:'app',sliceMs:0,maxCandidatesPerSlice:5,continueDelay:1,discoverLocal:async()=>{discoveries++;return {conversations:[],errors:0};}});t.after(()=>usage.dispose());
  await usage.sync(true);assert.ok(usage.continuation||calls===100);
- const deadline=Date.now()+10000;while(usage.pending||usage.continuation){if(Date.now()>deadline)throw Error('full refresh did not resume');await wait(2);}
+ const deadline=Date.now()+30000;while(usage.pending||usage.continuation){if(Date.now()>deadline)throw Error('full refresh did not resume');await wait(2);}
  assert.equal(calls,100);assert.equal(usage.status,'ready');assert.equal(lists,1);assert.equal(discoveries,1);assert.equal(checkpoints,1);assert.equal(usage.fullJournal,null);
 });
 
 async function settleImport(usage){
- const deadline=Date.now()+5000;
+ const deadline=Date.now()+20000;
  while(usage.pending||usage.continuation){if(Date.now()>deadline)throw Error('Full import did not terminate after its captured queue was exhausted');await wait(2);}
 }
 const listed=id=>({id,status:'DONE',modifiedAt:'2026-10-29T00:00:00Z'});

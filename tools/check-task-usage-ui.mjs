@@ -36,28 +36,32 @@ function task(current,descendants,{state='ready',subagents=descendants.length,lo
     subagentTokens:loadedSubagents?descendants.reduce((total,speed)=>total+speed.tokens.totalTokens,0):0,
     subagents,loadedSubagents,state,complete:state==='ready'}};
 }
-let snapshots={},preference={language:'en',languageGuideDismissed:true,revision:1},metricCalls=0,collection=null;
+const makeState=()=>({snapshots:{},preference:{language:'en',languageGuideDismissed:true,revision:1},metricCalls:0,collection:null});
+const states={inline:makeState(),ide:makeState(),panel:makeState()};
 const groups=[{id:'gemini',name:'Gemini',windows:{'5h':{available:true,remaining:.8},weekly:{available:true,remaining:.6}}}];
-const metrics=id=>({connection:'live',groups,preferences:preference,collection,speed:snapshots[id||ids.root]||null});
-const fixture=ide=>`<!doctype html><html><head><meta charset="utf-8">${ide?'<meta http-equiv="Content-Security-Policy" content="script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; require-trusted-types-for \'script\'; trusted-types \'none\'">':''}<style>
+const metrics=(state,id)=>({connection:'live',groups,preferences:state.preference,collection:state.collection,speed:state.snapshots[id||ids.root]||null});
+const fixture=mode=>{const ide=mode==='ide';return `<!doctype html><html><head><meta charset="utf-8">${ide?'<meta http-equiv="Content-Security-Policy" content="script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; require-trusted-types-for \'script\'; trusted-types \'none\'">':''}<style>
 body{margin:0;padding:40px;background:#18191b;color:#ddd;font:13px 'Segoe UI',sans-serif}.rounded-composer{max-width:940px;margin:300px auto 0;padding:10px;border-radius:16px;background:#27282a}.editor{height:45px}.actions,.left,.right{display:flex;align-items:center;gap:5px}.left{flex:1;min-width:0}.right{flex:none}button{height:28px;border:0;background:transparent;color:inherit}
 </style></head><body>${ide?'<div class="antigravity-agent-side-panel"><div id="conversation" role="region">':''}<div class="rounded-composer" ${ide?'id="antigravity.agentSidePanelInputBox"':''}><div class="editor" contenteditable="true" role="combobox" aria-label="Message input"></div><div class="actions"><div class="left"><button aria-label="Add context">＋</button><button data-testid="model-selector-trigger">Gemini 3.8 Flash</button></div><div class="right"><button aria-label="Record voice memo">♩</button><button aria-label="Send message">➜</button></div></div></div>${ide?'</div></div>':''}<script>
 history.replaceState({},'', '/c/${ids.root}');
-window.agPulseHost={getMetrics:async input=>(await fetch('/api/metrics?conversationId='+input.conversationId)).json(),getPreferences:async()=>(await fetch('/api/preferences')).json(),setPreferences:async input=>(await fetch('/api/preferences',{method:'POST',body:JSON.stringify(input)})).json()};
+window.agPulseHost={getMetrics:async input=>(await fetch('/api/metrics?mode=${mode}&conversationId='+input.conversationId)).json(),getPreferences:async()=>(await fetch('/api/preferences?mode=${mode}')).json(),setPreferences:async input=>(await fetch('/api/preferences?mode=${mode}',{method:'POST',body:JSON.stringify(input)})).json()};
 ${ide?`const box=document.getElementById('antigravity.agentSidePanelInputBox'),panel=document.querySelector('.antigravity-agent-side-panel');const owner={props:{cascadeId:'${ids.root}'},__k:[]},vnode={type:'div',__e:box,props:{id:box.id},__:owner,__k:[]};owner.__k=[vnode];panel.__k=owner;window.testOwner=owner;window.__agPulseSurface=(${surface})();`:''}
 window.__agPulseI18nFactory=(${factories.i18n});window.__agPulseThemeFactory=(${factories.theme});(${factories['inline-widget']})();
-</script></body></html>`;
+</script></body></html>`;};
 
 const server=createServer(async(req,res)=>{
   try {
-    const url=new URL(req.url,'http://localhost');let content,type='text/html';
+    const url=new URL(req.url,'http://localhost');
+    const mode=url.searchParams.get('mode')||req.headers['x-pulse-mode']||'inline';
+    const state=states[mode]||states.inline;
+    let content,type='text/html';
     if(url.pathname==='/api/preferences'){
-      if(req.method==='POST'){let body='';for await(const chunk of req)body+=chunk;preference={...preference,...JSON.parse(body),revision:preference.revision+1};}
-      content=JSON.stringify(preference);type='application/json';
+      if(req.method==='POST'){let body='';for await(const chunk of req)body+=chunk;state.preference={...state.preference,...JSON.parse(body),revision:state.preference.revision+1};}
+      content=JSON.stringify(state.preference);type='application/json';
     }else if(url.pathname==='/api/metrics'){
-      metricCalls++;content=JSON.stringify(metrics(url.searchParams.get('conversationId')));type='application/json';
-    }else if(url.pathname==='/inline')content=fixture(false);
-    else if(url.pathname==='/ide')content=fixture(true);
+      state.metricCalls++;content=JSON.stringify(metrics(state,url.searchParams.get('conversationId')));type='application/json';
+    }else if(url.pathname==='/inline')content=fixture('inline');
+    else if(url.pathname==='/ide')content=fixture('ide');
     else if(url.pathname==='/')content=panelPageSource();
     else if(url.pathname==='/app.js'){content=panelAppSource();type='text/javascript';}
     else if(url.pathname==='/styles.css'){content=await readFile(join(repo,'sidecars/panel/styles.css'),'utf8');type='text/css';}
@@ -69,16 +73,17 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
-const errors=[],results=[];let browser;
+const errors=[];let browser;
 try {
   browser=await chromium.launch(process.platform==='win32'&&!process.env.CI?{channel:'msedge',headless:true}:process.platform==='darwin'&&!process.env.CI?{channel:'chrome',headless:true}:{headless:true});
   const origin='http://127.0.0.1:'+server.address().port;
-  for(const mode of ['inline','ide','panel'].filter(value=>!process.env.PULSE_TASK_UI_MODE||process.env.PULSE_TASK_UI_MODE===value)) {
-    const inline=mode!=='panel';preference={language:'en',languageGuideDismissed:true,revision:1};collection=null;
-    snapshots={[ids.root]:task(own,[],{state:'loading',subagents:2,loadedSubagents:0}),[ids.child]:task(child,[leaf]),[ids.leaf]:leaf};
+  const results=await Promise.all(['inline','ide','panel'].filter(value=>!process.env.PULSE_TASK_UI_MODE||process.env.PULSE_TASK_UI_MODE===value).map(async mode=>{
+    const inline=mode!=='panel',state=states[mode];
+    state.preference={language:'en',languageGuideDismissed:true,revision:1};state.collection=null;
+    state.snapshots={[ids.root]:task(own,[],{state:'loading',subagents:2,loadedSubagents:0}),[ids.child]:task(child,[leaf]),[ids.leaf]:leaf};
     const page=await browser.newPage({viewport:{width:1180,height:900},colorScheme:'dark'});
     page.on('pageerror',error=>errors.push(`${mode}: ${error.message}`));
-    if(!inline)await page.addInitScript(id=>{window.sidecar={conversationId:id,fetch:(...args)=>fetch(...args)};},ids.root);
+    if(!inline)await page.addInitScript(id=>{window.sidecar={conversationId:id,fetch:(url,init={})=>fetch(url,{...init,headers:{...(init.headers||{}),'x-pulse-mode':'panel'}})};},ids.root);
     try {
       await page.goto(origin+(inline?'/'+mode:'/'));
       const scope=inline?page.locator('#ag-pulse-status-bar'):page.locator('body');
@@ -142,7 +147,7 @@ try {
       // A disk-completed parent may know about subagents without having read
       // any of their requests. Show fresh own figures with explicit scope;
       // never present an old merged task total as the current one.
-      snapshots[ids.root]=task(own,[],{state:'partial',subagents:2,loadedSubagents:0});
+      state.snapshots[ids.root]=task(own,[],{state:'partial',subagents:2,loadedSubagents:0});
       await expectText('cache-note','Current agent only; subagent statistics unavailable.');
       await expectText('cache-coverage','5,500 tok');await expectText('task-subagents','—');
       await expectMarker(true,'Current agent only; subagent statistics unavailable.');
@@ -172,18 +177,18 @@ try {
       await page.evaluate(()=>{document.body.dataset.theme='dark';document.documentElement.style.setProperty('--background','#18191b');});
       await page.waitForFunction(inline=>(inline?document.getElementById('ag-pulse-status-bar'):document.documentElement)?.dataset.pulseTheme==='dark',inline);
       await expectMarker(true,'僅目前代理；子代理統計暫時無法取得');
-      collection={state:'processing',code:'background-collection'};
+      state.collection={state:'processing',code:'background-collection'};
       await expectMarker(false,'僅目前代理；子代理統計暫時無法取得');
-      collection={state:'limited',code:'budget-exceeded'};
+      state.collection={state:'limited',code:'budget-exceeded'};
       if(inline)await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.dataset.collection==='limited');
       else await expectText('health-note','此對話統計量超過採集限制。');
       await expectMarker(false,'僅目前代理；子代理統計暫時無法取得');
-      collection=null;await expectMarker(true,'僅目前代理；子代理統計暫時無法取得');
-      snapshots[ids.root]=task(own,[],{state:'loading',subagents:2,loadedSubagents:0});
+      state.collection=null;await expectMarker(true,'僅目前代理；子代理統計暫時無法取得');
+      state.snapshots[ids.root]=task(own,[],{state:'loading',subagents:2,loadedSubagents:0});
       await expectMarker(false,'僅目前代理；子代理統計暫時無法取得');
       await chooseLanguage('zh-CN');await expectText('cache-note','正在汇总子代理…');
       assert.equal(await scope.locator('#task-own-row dt').textContent(),'当前代理');
-      snapshots[ids.root]=task(own,[child,leaf]);
+      state.snapshots[ids.root]=task(own,[child,leaf]);
       await expectText('cache-coverage','12,600 tok');await expectText('task-subagents','7,100 tok');
       await expectText(inline?'cache-total':'strip-cache-total','12.6K tok');
       await expectText(inline?'cache-detail-rate':'cache-rate','67.6%');
@@ -196,7 +201,7 @@ try {
       await page.screenshot({path:join(output,mode+'-ready-zh-CN.png')});
 
       await chooseLanguage('zh-TW');assert.equal(await scope.locator('#task-own-row dt').textContent(),'目前代理');
-      snapshots[ids.root]=task(own,[child],{state:'partial',subagents:2,loadedSubagents:1});
+      state.snapshots[ids.root]=task(own,[child],{state:'partial',subagents:2,loadedSubagents:1});
       await expectText('cache-note','部分子代理暫時無法讀取');await expectText('task-subagents','5,900 tok');
       await expectMarker(false,'僅目前代理；子代理統計暫時無法取得');
       await expectText('cache-coverage','11,400 tok');
@@ -204,9 +209,9 @@ try {
       await chooseLanguage('en');await expectText('cache-note','Some subagents unavailable');
       assert.equal(await scope.locator('#task-own-row dt').textContent(),'Current agent');
       await expectOwn(own);
-      snapshots[ids.root]=task(own,[child,leaf]);await expectText('cache-coverage','12,600 tok');
+      state.snapshots[ids.root]=task(own,[child,leaf]);await expectText('cache-coverage','12,600 tok');
       await expectText('cache-note','');
-      const callsBefore=metricCalls;
+      const callsBefore=state.metricCalls;
       const stable=await page.evaluate(async inline=>{
         const root=inline?document.getElementById('ag-pulse-status-bar').shadowRoot:document;
         const card=root.getElementById('cache-card'),chip=root.querySelector('[data-card=cache]');
@@ -217,7 +222,7 @@ try {
         await new Promise(resolve=>setTimeout(resolve,6500));observer.disconnect();
         return {changes,scrollBefore:scroll,scrollAfter:card.scrollTop};
       },inline);
-      assert.ok(metricCalls-callsBefore>=2,'Observe at least two real polling refreshes');
+      assert.ok(state.metricCalls-callsBefore>=2,'Observe at least two real polling refreshes');
       assert.deepEqual(stable.changes,[],`${mode}: unchanged task/cache data must not mutate the card or pill on polling`);
       assert.equal(stable.scrollAfter,stable.scrollBefore);
 
@@ -239,12 +244,12 @@ try {
       assert.equal(await scope.locator('#task-subagents-row').isVisible(),false);
       assert.equal(await scope.locator('#cache-note').isVisible(),false);await expectOwn(leaf);
       // Even an irrelevant zero-child aggregate cannot replace own usage.
-      snapshots[ids.leaf]={...leaf,taskUsage:{...task(own,[child]).taskUsage,subagents:0}};
-      const previousCalls=metricCalls;await page.waitForTimeout(3300);assert.ok(metricCalls>previousCalls);
+      state.snapshots[ids.leaf]={...leaf,taskUsage:{...task(own,[child]).taskUsage,subagents:0}};
+      const previousCalls=state.metricCalls;await page.waitForTimeout(3300);assert.ok(state.metricCalls>previousCalls);
       await expectText('cache-coverage','1,200 tok');
       assert.equal(await scope.locator('#task-own-row').isVisible(),false);
-      results.push({renderer:mode,aggregateVsOwn:true,nestedChild:true,languages:['en','zh-CN','zh-TW'],loadingToReady:true,partial:true,singleSession:true,stableCachePolling:stable});
+      return {renderer:mode,aggregateVsOwn:true,nestedChild:true,languages:['en','zh-CN','zh-TW'],loadingToReady:true,partial:true,singleSession:true,stableCachePolling:stable};
     }finally{await page.close();}
-  }
+  }));
   assert.deepEqual(errors,[]);console.log(JSON.stringify({results,pageErrors:errors,screenshots:output},null,2));
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

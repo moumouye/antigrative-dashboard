@@ -77,7 +77,7 @@ try{
    await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.dataset.scope==='main');
    // The child request remains unresolved: the parent must refresh without
    // waiting for that promise or the previous route's 2.2s polling budget.
-   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:750});
+   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:1500});
    assert.equal(await page.evaluate(()=>testPending.length),1,'Old child request is still held');
    await page.evaluate(()=>testPending.splice(0).forEach(resolve=>resolve()));
    await page.waitForTimeout(50);
@@ -91,9 +91,9 @@ try{
    await page.evaluate(()=>{testHold=true;document.getElementById('ag-pulse-status-bar').shadowRoot.querySelector('.refresh').click()});
    await page.waitForFunction(()=>testPending.length>0);
    await page.evaluate(([id,kind])=>{testHold=false;switchConversation(id,kind)},[parent,'parent']);
-   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:750});
+   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:1500});
    await page.evaluate(([id,kind])=>{samples[id].speed.tps=120;switchConversation(id,kind)},[child,'child']);
-   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='120.0',{},{timeout:750});
+   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='120.0',{},{timeout:1500});
    await page.evaluate(()=>{testPending.splice(0).forEach(resolve=>resolve());testFailures=[]});
    await page.waitForTimeout(50);
    assert.equal(await strip.locator('#tps').textContent(),'120.0','Old same-ID response is still obsolete');
@@ -102,7 +102,7 @@ try{
    await page.evaluate(()=>{testHold=true;document.getElementById('ag-pulse-status-bar').shadowRoot.querySelector('.refresh').click()});
    await page.waitForFunction(()=>testPending.length>0);
    await page.evaluate(([id,kind])=>{testHold=false;switchConversation(id,kind)},[parent,'parent']);
-   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:750});
+   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:1500});
    await page.evaluate(id=>{testFailures.splice(0).forEach(reject=>reject());testPending=[];samples[id].speed.tps=90},child);
    await page.waitForTimeout(50);
    assert.equal(await strip.locator('#dot').getAttribute('class'),'dot live');

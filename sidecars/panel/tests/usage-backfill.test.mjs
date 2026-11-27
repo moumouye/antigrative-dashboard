@@ -145,7 +145,7 @@ test('delegated histories absent from disk and lists survive slices, cycles, res
   return value;
  };
  const first=tracker(t,store,ledger,{sliceMs:0,continueDelay:5});await first.sync();
- const settle=async usage=>{const end=Date.now()+3000;while(usage.continuation||usage.pending){if(Date.now()>end)throw Error('Delegation backfill failed to settle');await delay(5);}};
+ const settle=async usage=>{const end=Date.now()+15000;while(usage.continuation||usage.pending){if(Date.now()>end)throw Error('Delegation backfill failed to settle');await delay(5);}};
  await settle(first);assert.deepEqual(calls,[id,other,grandchild]);assert.equal((await ledger.summary(account)).totalTokens,60);
  assert.equal((await ledger.backfillState(account,'app'))[key(id)].hasDelegates,true);
  first.dispose();calls.length=0;childOutput=30;

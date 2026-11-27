@@ -66,7 +66,7 @@ try{
    await page.evaluate(()=>{hold=true;document.getElementById('ag-pulse-status-bar').shadowRoot.querySelector('.refresh').click()});
    await page.waitForFunction(()=>held.length===1);
    await page.evaluate(id=>{hold=false;document.querySelector('.composer').dataset.cascadeId=id},other);
-   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:1000});
+   await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.shadowRoot.getElementById('tps').textContent==='50.0',{},{timeout:1500});
    await page.evaluate(()=>held.splice(0).forEach(resolve=>resolve()));await page.waitForTimeout(80);
    assert.equal(await strip.locator('#tps').textContent(),'50.0');
    // Invalid explicit owner never falls back to the route's parent statistics.

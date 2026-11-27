@@ -28,10 +28,8 @@ const BASE=[
 // `npm install --no-save --package-lock=false playwright`; locally the same
 // command unlocks them without touching package.json.
 const BROWSER=[
-  {id:'ui',label:'Upstream UI gates',cmd:'npm',args:['run','test:ui']},
-  {id:'panel-ui',label:'Panel UI gates',cmd:'npm',args:['run','test:panel-ui']},
-  {id:'usage-ui-upstream',label:'Upstream usage gates',cmd:'npm',args:['run','test:usage-ui']},
-  {id:'ide',label:'IDE gates',cmd:'npm',args:['run','test:ide']},
+  {id:'ui-gates',label:'Playwright UI gate suite (parallel)',cmd:'node',args:['tools/run-ui-gates.mjs','all'],timeout:600000},
+  {id:'ide',label:'IDE unit tests',cmd:'node',args:['--test','ide/tests/*.test.mjs']},
   {id:'update',label:'Update process gates',cmd:'npm',args:['run','test:update-process']},
 ];
 

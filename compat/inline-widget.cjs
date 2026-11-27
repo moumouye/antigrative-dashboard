@@ -23,7 +23,7 @@ module.exports = function installAgPulseInlineWidget() {
   const HOVER_DELAY=250,WARM_WINDOW=350,LEAVE_DELAY=120;
   const isWarm=()=>Boolean(cardName||Date.now()<warmUntil);
   let chosen=localGet('ag-pulse-group'),group=null;
-  let refreshRequest=null,manualRequest=null,requestEpoch=0,disposed=false;
+  let refreshRequest=null,manualRequest=null,liveRequest=null,requestEpoch=0,disposed=false;
   let composer=null,layoutFrame=null;
   let usageDashboard=null,updateMenu=null;
   let densityFrame=null,densityMotion=null,densityProbe=null;
@@ -111,7 +111,7 @@ module.exports = function installAgPulseInlineWidget() {
   function syncConversation(){
     const id=conversationId();
     if(id===lastConversation)return false;
-    lastConversation=id;requestEpoch++;pending=false;refreshRequest=null;lastFetch=0;
+    lastConversation=id;requestEpoch++;pending=false;refreshRequest=null;liveRequest=null;lastFetch=0;
     stopDensityMotion();densityFrame=null;densityProbe=null;
     manualRequest=null;refreshBusy(false);
     data={connection:'offline',groups:[],speed:null};group=null;hide();
@@ -554,7 +554,7 @@ module.exports = function installAgPulseInlineWidget() {
         node.remove();node=null;root=null;
         // A disposed dialog cannot be reused with its old strip/listeners.
         // Invalidate this mount's pending requests and rebuild on discovery.
-        requestEpoch++;pending=false;refreshRequest=null;manualRequest=null;lastFetch=0;
+        requestEpoch++;pending=false;refreshRequest=null;manualRequest=null;liveRequest=null;lastFetch=0;
       }
       return;
     }
@@ -680,7 +680,7 @@ module.exports = function installAgPulseInlineWidget() {
         .usage-summary strong{font-size:20px;font-weight:550;letter-spacing:-.5px;color:var(--pulse-foreground);font-variant-numeric:tabular-nums}.usage-unit{font-size:9px;letter-spacing:0;color:var(--pulse-muted)}
         #open-usage{align-items:center;min-height:34px;gap:12px;width:calc(100% + 12px);margin:5px -6px -3px;padding:7px 6px;border:0;border-radius:6px;background:transparent;color:var(--pulse-label);font-size:11px;text-align:left;line-height:20px}#open-usage:hover{background:var(--pulse-hover);color:var(--pulse-foreground)}#open-usage svg{width:14px;height:14px;color:var(--pulse-muted);flex:none}
       `;
-      usageDashboard=window.__agPulseUsageFactory({root,language,setMarkup,hostLabel:surface?.usageHostLabel||'Antigravity',guideDismissed:usageGuideDismissed,onDismissGuide:async()=>{const saved=await window.agPulseHost.setPreferences({usageGuideDismissed:true});if(saved?.usageGuideDismissed!==true)throw Error('Usage guide could not be saved');syncGuide(saved);},onLanguage:next=>preferences.choose(next),onRefresh:()=>refreshManually(true)});
+      usageDashboard=window.__agPulseUsageFactory({root,language,setMarkup,hostLabel:surface?.usageHostLabel||'Antigravity',guideDismissed:usageGuideDismissed,onDismissGuide:async()=>{const saved=await window.agPulseHost.setPreferences({usageGuideDismissed:true});if(saved?.usageGuideDismissed!==true)throw Error('Usage guide could not be saved');syncGuide(saved);},onLanguage:next=>preferences.choose(next),onRefresh:()=>refreshManually(true),onPoll:()=>{if(!pending)return refresh();if(liveRequest)return liveRequest;const epoch=requestEpoch;liveRequest=(async()=>{try{return await window.agPulseHost.getMetrics({});}finally{if(epoch===requestEpoch)liveRequest=null;}})();return liveRequest;}});
       $('open-usage').addEventListener('click',()=>{const trigger=root.querySelector('[data-card=cache]'),conversation=conversationId(),needsImport=!data?.usage?.requests;hide();usageDashboard.open(data?.usage,trigger);void window.agPulseHost.getMetrics({conversationId:conversation,force:true,...(needsImport?{usageSync:true}:{})}).then(result=>{if(!disposed&&result?.usage)usageDashboard.update(result.usage);}).catch(()=>{});});
     }
     localize();
@@ -813,7 +813,16 @@ module.exports = function installAgPulseInlineWidget() {
     closeGroup();refreshBusy(true);const started=performance.now();
     const epoch=requestEpoch,request={};manualRequest=request;
     request.promise=(async()=>{
-      try{if(pending)await refreshRequest;if(!disposed&&epoch===requestEpoch)await refresh(true,syncUsage);}
+      try{
+        while(pending||liveRequest){
+          const waits=[];
+          if(pending&&refreshRequest)waits.push(refreshRequest);
+          if(liveRequest)waits.push(liveRequest);
+          if(!waits.length)break;
+          await Promise.all(waits);
+        }
+        if(!disposed&&epoch===requestEpoch)await refresh(true,syncUsage);
+      }
       finally{
         // A fast cached response still needs visible press feedback. This does
         // not delay data updates; only the indicator has a 250ms minimum.
@@ -848,7 +857,7 @@ module.exports = function installAgPulseInlineWidget() {
   densityMedia.addEventListener('change',stopDensityMotion);
   const timerId=setInterval(()=>{mount();fit();tick();position();if(conversationId()!==lastConversation||Date.now()-lastFetch>(document.hidden?10000:2200))refresh();},1000);
   window.__agPulseDispose=()=>{
-    disposed=true;requestEpoch++;pending=false;refreshRequest=null;stopDensityMotion();densityFrame=null;densityProbe=null;
+    disposed=true;requestEpoch++;pending=false;refreshRequest=null;liveRequest=null;stopDensityMotion();densityFrame=null;densityProbe=null;
     clearInterval(timerId);clearTimeout(hoverTimer);clearTimeout(openTimer);if(layoutFrame!==null)cancelAnimationFrame(layoutFrame);observer.disconnect();resizeObserver?.disconnect();themeController?.dispose();preferences.dispose();hide();usageDashboard?.dispose();updateMenu?.dispose();node?.remove();
     document.removeEventListener('keydown',onKey);document.removeEventListener('pointerdown',onPointer);document.removeEventListener('focusin',onFocus);
     document.removeEventListener('scroll',scheduleLayout,true);window.removeEventListener('resize',scheduleLayout);

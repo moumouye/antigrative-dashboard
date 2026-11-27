@@ -24,7 +24,7 @@ const days=Array.from({length:120},(_,i)=>{
 });
 const hours=Object.fromEntries(Array.from({length:10},(_,i)=>[9+i,{uncached:(i+1)*1000,cacheRead:(i+1)*400,cacheWrite:0,output:(i+1)*200,total:(i+1)*1600,requests:i+1,models:{[models[0]]:{total:(i+1)*1600}}}]));
 days.at(-1).hours=hours;
-const fixture={accountKey:'fixture',today:'2026-10-11',timeZone:'Asia/Shanghai',models,days,todayTokens:45000,weekTokens:400000,monthTokens:700000,totalTokens:6000000,requests:500,firstDate:days[0].date,syncing:false,unknownRequests:1,partialRequests:1,unreadableFiles:0,hoursFrom:'2026-06-14'};
+const fixture={accountKey:'fixture',today:'2026-10-11',timeZone:'Asia/Shanghai',models,days,todayTokens:45000,weekTokens:400000,monthTokens:700000,totalTokens:6000000,requests:500,firstDate:days[0].date,syncing:false,unknownRequests:1,partialRequests:0,missingConversations:2,confirmedMissingConversations:0,retryingConversations:2,unreadableFiles:0,hoursFrom:'2026-06-14'};
 fixture.pricing={exchangeRate:7.1,exchangeRateUpdatedAt:'2026-10-10T00:00:00.000Z',lastSyncedAt:'2026-10-10T00:00:00.000Z',syncing:false,models:Object.fromEntries(models.map((m,j)=>[m,{prompt:1e-6*(j+1),completion:2e-6*(j+1),cacheRead:1e-7,cacheWrite:1e-7}]))};
 
 const html=`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#17181a;color:#ddd;font:13px 'Segoe UI';padding:50px}.rounded-composer{max-width:900px;margin:300px auto 0;background:#27282a;padding:12px;border-radius:18px}.editor{height:45px}.actions{display:flex;align-items:center;gap:5px}.left{display:flex;flex:1;min-width:0}.right{display:flex;gap:5px}button{background:transparent;border:0;color:inherit;height:28px}</style></head><body>
@@ -111,7 +111,8 @@ try{
   assert.ok((await v(`v.getElementById('totals').textContent`)).includes('¥'),'cost rendered in CNY');
   assert.equal(await v(`!!v.getElementById('locale')||!!v.querySelector('.eyebrow')`),false,'no duplicate language toggle or English eyebrow');
   assert.equal(await evaluate(`metricsRequests.some(r=>r.usageSync===true)`),false,'opening a populated ledger never restarts a full import');
-  assert.equal(await v(`v.getElementById('alert').hidden`),true,'partial records are not a warning');
+  assert.equal(await v(`v.getElementById('alert').hidden`),true,'retrying reads are sync status, not a warning');
+  assert.ok((await v(`v.getElementById('timezone').textContent`)).includes('正在同步历史'),'retrying status shown in timezone footer');
   assert.equal(await v(`v.getElementById('note').hidden`),true,'the overview stays free of historical footnotes');
 
   const peakBefore=await v(`v.getElementById('hourly-summary').textContent`);
@@ -140,6 +141,9 @@ try{
 
   const costCell=await v(`(v.querySelector('#table-body tr td:last-child')?.textContent)||''`);
   assert.ok(costCell.includes('¥'),'table cost column');
+  await evaluate(`testData={...testData,partialRequests:1,retryingConversations:0,missingConversations:0};testData.requests++;`);
+  await v(`v.getElementById('refresh').click()`);
+  await until(`(()=>{const sr=document.getElementById('ag-pulse-status-bar').shadowRoot;const v=sr.getElementById('usage-dashboard').firstElementChild.shadowRoot;return !v.getElementById('alert').hidden;})()`,'partial requests alert');
 
   console.log(JSON.stringify({gate:'usage-ui',browser:chrome.replace('/Contents/MacOS/', ' '),checks:['entry','intro','single language control','no import on open','hourly chart','peak summary','live refresh','CNY cost','undated footnote','details tab','table','component filter'],passed:true,pageErrors:errors}));
   assert.deepEqual(errors,[]);

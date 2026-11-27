@@ -1,5 +1,5 @@
 // Shared local usage views. Values and model labels are inserted as text.
-module.exports = function createUsageDashboard({root,language,setMarkup,hostLabel='Antigravity',guideDismissed=false,onDismissGuide,onLanguage,onRefresh}) {
+module.exports = function createUsageDashboard({root,language,setMarkup,hostLabel='Antigravity',guideDismissed=false,onDismissGuide,onLanguage,onRefresh,onPoll}) {
   const dialog=document.createElement('dialog');dialog.id='usage-dashboard';dialog.setAttribute('aria-modal','true');
   dialog.style.cssText='width:min(1040px,calc(100vw - 40px));max-width:none;height:fit-content;max-height:min(820px,calc(100dvh - 64px));box-sizing:border-box;overflow:hidden;visibility:visible;pointer-events:auto;padding:0;border:1px solid var(--pulse-border);border-radius:18px;background:var(--pulse-background);color:var(--pulse-foreground);box-shadow:0 24px 100px #0006';
   const shell=document.createElement('div'),view=shell.attachShadow({mode:'open'});shell.style.height='100%';dialog.append(shell);root.append(dialog);
@@ -1117,9 +1117,12 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   function startLive(){
     if(liveTimer||disposed)return;
     liveTimer=setInterval(async()=>{
-      if(disposed||!dialog.open||document.hidden||liveBusy)return;
+      if(disposed||!dialog.open||document.hidden||liveBusy||busy)return;
       liveBusy=true;
-      try{const result=await window.agPulseHost?.getMetrics?.({});if(result?.usage&&!disposed)applyUpdate(result.usage);}
+      try{
+        const result=await (typeof onPoll==='function'?onPoll():window.agPulseHost?.getMetrics?.({}));
+        if(result?.usage&&!disposed)applyUpdate(result.usage);
+      }
       catch{}
       finally{liveBusy=false;}
     },3000);

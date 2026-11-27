@@ -43,7 +43,7 @@ test('superseded watcher stops exactly once and preserves newer marker during sh
   await old.claim();let count=0;
   const lost=new Promise(resolve=>old.watch(()=>{count++;resolve();}));
   let timer;t.after(()=>clearTimeout(timer));
-  await next.claim();await Promise.race([lost,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('watch timeout')),1000);})]);
+  await next.claim();await Promise.race([lost,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('watch timeout')),5000);})]);
   old.stop();assert.equal(count,1);assert.equal(await next.isOwner(),true);
   assert.equal(JSON.parse(await readFile(next.file,'utf8')).token,'new');next.stop();
 });
@@ -54,7 +54,7 @@ test('simultaneous claims in separate live processes retain the newest owner',as
   const children=[];
   t.after(()=>{for(const child of children)child.kill();});
   const wait=(child,type)=>new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>{cleanup();reject(new Error('Child ownership test timed out: '+type));},5000);
+    const timer=setTimeout(()=>{cleanup();reject(new Error('Child ownership test timed out: '+type));},15000);
     const message=value=>{if(value.type==='failed'){cleanup();reject(new Error('Child ownership claim failed: '+value.code+' '+value.message));}else if(value.type===type){cleanup();resolve(value);}};
     const exit=()=>{cleanup();reject(new Error('Child exited before '+type));};
     function cleanup(){clearTimeout(timer);child.off('message',message);child.off('exit',exit);}

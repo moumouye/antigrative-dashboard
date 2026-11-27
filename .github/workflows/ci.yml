@@ -1,11 +1,19 @@
 name: Verify
-on: [push, pull_request]
+on:
+  push:
+    tags-ignore:
+      - 'v*'
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 
 jobs:
   matrix-tests:
     name: Core Matrix (${{ matrix.os }})
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +57,7 @@ jobs:
 
   ui-verification:
     name: Headless Browser UI Verification
-    needs: matrix-tests
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,15 +67,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Playwright Chromium
-        run: |
-          npm install --no-save --package-lock=false playwright
-          npx playwright install --with-deps chromium
-      - name: Shared Webview UI regressions
-        run: npm run test:ui
-      - name: IDE Webview UI regressions
-        run: node tools/check-ide-ui.mjs
-      - name: Usage dashboard regressions
-        run: npm run test:usage-ui
-      - name: Sidecar panel regressions
-        run: npm run test:panel-ui
+      - name: Install Playwright
+        run: npm install --no-save --package-lock=false playwright
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('node_modules/playwright/package.json') }}
+      - name: Install Chromium browser & OS deps
+        run: npx playwright install --with-deps chromium
+      - name: Run parallel Playwright UI regression gates
+        run: node tools/run-ui-gates.mjs all

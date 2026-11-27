@@ -10,6 +10,8 @@ jobs:
     permissions:
       contents: read
   verify:
+    name: Core Matrix (${{ matrix.os }})
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -23,31 +25,31 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: npm test
+      - name: Run Node.js unit tests
+        run: npm test
       - name: Verify native Windows socket discovery without parallel test load
         if: runner.os == 'Windows'
         run: node tools/check-windows-discovery.mjs
+      - name: Stream an optional transcript without retaining its text
+        run: node --expose-gc tools/check-transcript-resources.mjs
       - name: Stream a synthetic corpus above the former 512 MiB cap
         run: node --expose-gc tools/check-trajectory-resources.mjs 640 1024
       - name: Reject over-budget projected statistics without partial cache
         run: node --expose-gc tools/check-trajectory-resources.mjs 0 32768 --expect-budget-rejection
-      - run: node --test ide/tests/*.test.mjs
-      - run: python -m unittest discover -s tests -v
+      - name: Run IDE adapter tests
+        run: node --test ide/tests/*.test.mjs
+      - name: Run Python lifecycle and packaging tests
+        run: python -m unittest discover -s tests -v
       - name: Update through real worker processes from the host working directory
         run: npm run test:update-process
-      - name: Install Chromium for shared UI regressions
-        run: |
-          npm install --no-save --package-lock=false playwright
-          npx playwright install --with-deps chromium
-      - run: npm run test:ui
-      - run: node tools/check-ide-ui.mjs
-      - run: npm run test:usage-ui
-      - run: npm run test:panel-ui
-      - run: python manage.py package
-      - run: python ide/package.py
-  release:
-    needs: [verify, host-resources]
-    runs-on: windows-latest
+      - name: Package desktop archive
+        run: python manage.py package
+      - name: Package IDE VSIX
+        run: python ide/package.py
+  ui-verification:
+    name: Headless Browser UI Verification
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,13 +58,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install Playwright
+        run: npm install --no-save --package-lock=false playwright
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('node_modules/playwright/package.json') }}
+      - name: Install Chromium browser & OS deps
+        run: npx playwright install --with-deps chromium
+      - name: Run parallel Playwright UI regression gates
+        run: node tools/run-ui-gates.mjs all
+  release:
+    needs: [verify, ui-verification, host-resources]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Check version
-        shell: pwsh
         run: |
-          $version = (Get-Content plugin.json -Raw | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag and plugin version differ' }
-      - run: npm test
-      - run: python -m unittest discover -s tests -v
+          python -c "import json, os, sys; v=json.load(open('plugin.json'))['version']; sys.exit(0 if os.environ['GITHUB_REF_NAME']==f'v{v}' else f'Tag and plugin version differ: {v}')"
       - name: Publish text-only release notes
         env:
           GH_TOKEN: ${{ github.token }}
