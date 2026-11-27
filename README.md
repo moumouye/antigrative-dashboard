@@ -94,7 +94,8 @@ python manage.py install   # Linux / macOS 使用 python3
 
 | 操作 | 命令 | 说明 |
 | :--- | :--- | :--- |
-| **检查状态** | `python manage.py status` | 查看插件安装位置、挂载模式与连接健康状态 |
+| **检查状态** | `python manage.py status` | 查看插件安装位置、挂载模式、CDP 引导与连接健康状态 |
+| **配置/修复 CDP** | `python manage.py setup-cdp` | 重建共享无侵入 CDP 启动入口（macOS Launcher / Win 快捷方式） |
 | **临时停用** | `python manage.py disable` | 暂时禁用插件，在下一次轮询时隐藏监控条 |
 | **重新启用** | `python manage.py enable` | 恢复插件并重新显示监控条 |
 | **完整卸载** | `python manage.py uninstall` | 安全移除插件并还原环境（保留备份与历史统计） |
@@ -123,11 +124,12 @@ python manage.py install-cli   # 安装 CLI 状态栏适配器
 ## ❓ 常见问题
 
 <details>
-<summary><strong>Q: 安装后没有看到监控条怎么办？</strong></summary>
+<summary><strong>Q: 安装后没有看到监控条怎么办？（关于新版 Antigravity 默认关闭 CDP 的说明）</strong></summary>
 
-1. 确认已**完全退出并重启** Antigravity 客户端（部分系统需要彻底退出托盘后台）。
-2. 在终端运行 `python manage.py status` 检查安装状态。
-3. 打开任一已有对话或新建对话，监控条将在首次加载后挂载在模型选择下拉菜单旁。
+新版 Antigravity 桌面端默认关闭了本地 CDP 调试端口。安装脚本已内置**零侵入外部 CDP 引导（`compat/cdp_bootstrap.py`）**，多个 Antigravity CDP 插件共享同一份引导底座，绝不修改官方 `Antigravity.app` 或 `app.asar`：
+1. **macOS**：已自动创建登录自启项（`com.moumouye.antigravity-cdp`）与 `/Applications/Antigravity Launcher.app`。若完全退出过客户端，请通过 **「Antigravity Launcher」** 启动（建议替换 Dock 中的原版图标）。
+2. **Windows**：已自动为桌面 / 开始菜单 / 任务栏快捷方式追加 `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1` 参数。若之前固定在任务栏的旧图标未生效，请取消固定后从桌面重新固定一次；客户端大版本更新后若覆盖了快捷方式，运行 `python manage.py setup-cdp` 即可一键修复。
+3. 在终端运行 `python manage.py status` 可核验 `cdpBootstrap.cdpReady` 是否为 `true`。
 </details>
 
 <details>

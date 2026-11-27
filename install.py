@@ -170,6 +170,7 @@ def main():
         print(f"Source saved at: {target_dir}")
         print("Useful commands:")
         print(f"  {sys.executable} {manage_py} status      # Check installation status")
+        print(f"  {sys.executable} {manage_py} setup-cdp   # Configure/repair loopback CDP launcher")
         print(f"  {sys.executable} {manage_py} enable      # Enable widget")
         print(f"  {sys.executable} {manage_py} disable     # Temporarily disable widget")
         print(f"  {sys.executable} {manage_py} uninstall   # Uninstall widget")

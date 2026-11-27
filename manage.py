@@ -67,6 +67,13 @@ def adapter():
     module.BACKUPS = BACKUPS
     return module
 
+
+def cdp_module():
+    spec = importlib.util.spec_from_file_location('pulse_cdp_bootstrap', SOURCE / 'compat' / 'cdp_bootstrap.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 def original_for_current(current):
     digest = hashlib.sha256(current).hexdigest()
     if not BACKUPS.exists():
@@ -144,6 +151,8 @@ def install(panel_only=False, legacy_loader=False):
         settings['profile'] = str(_paths['profile'])
     atomic_json(SETTINGS, settings)
     set_enabled(True)
+    if not panel_only:
+        cdp_module().ensure_cdp_bootstrap('antigravity-pulse', home=HOME)
     print('Installed:', PLUGIN)
     print('Fully quit and reopen Antigravity to start the plugin runtime. App updates no longer overwrite the inline adapter.')
 
@@ -175,6 +184,7 @@ def uninstall():
         shutil.rmtree(resolved)
     else:
         atomic_json(SETTINGS, {'enabled': False})
+    cdp_module().remove_cdp_bootstrap('antigravity-pulse', home=HOME)
     print('Antigrative Dashboard removed. Backups and diagnostic logs are retained for recovery.')
     print('Fully quit and reopen Antigravity to unload the UI adapter.')
 
@@ -185,6 +195,7 @@ def status():
     print(json.dumps({'installed': installed, 'enabled': bool(enabled), 'pluginDirectory': str(PLUGIN),
                       'integrationMode': json_read(SETTINGS).get('mode', 'legacy'),
                       'inlineIntegration': json_read(health_file, None),
+                      'cdpBootstrap': cdp_module().inspect_cdp_status(home=HOME),
                       'toolbarAdapterRecoverable': APP.exists() and original_for_current(APP.read_bytes()) is not None}, indent=2))
 
 def package(output=None):
@@ -216,7 +227,7 @@ def main():
     group.add_argument('--panel-only', action='store_true')
     group.add_argument('--legacy-loader', action='store_true', help='Opt in to the old, version-specific app.asar adapter')
     p.add_argument('--app-path', type=Path, help='Path to the desktop app resources/app.asar for a custom installation')
-    for action in ('enable', 'disable', 'status', 'uninstall'): sub.add_parser(action)
+    for action in ('enable', 'disable', 'status', 'uninstall', 'setup-cdp'): sub.add_parser(action)
     p = sub.add_parser('install-cli', help='Install the official CLI statusLine adapter independently of desktop')
     p.add_argument('--node', help='Node.js 20+ executable (defaults to PATH)')
     p.add_argument('--language', choices=('en', 'zh-CN', 'zh-TW'), help='Override shared desktop language choice')
@@ -239,6 +250,7 @@ def main():
         elif args.action == 'disable': set_enabled(False)
         elif args.action == 'uninstall': uninstall()
         elif args.action == 'status': status()
+        elif args.action == 'setup-cdp': cdp_module().ensure_cdp_bootstrap('antigravity-pulse', home=HOME)
         elif args.action == 'package': package(args.output)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f'Antigrative Dashboard: {error}', file=sys.stderr)

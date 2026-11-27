@@ -70,6 +70,6 @@ IDE 端专用包为 `antigrative-dashboard-ide-*.vsix`，安装与配置独立�
 
 ## 6. 挂载与安全物理策略 (Security & Mounting Policies)
 
-1. **宿主零侵入原则**：严禁修改宿主 `resources/app.asar`，所有挂载均通过运行时脚本注入或扩展机制无损挂载；
+1. **宿主零侵入原则**：严禁修改宿主 `resources/app.asar` 或重签名应用包体；所有挂载通过外部启动参数引导（`compat/cdp_bootstrap.py`）与运行时脚本无损完成；
 2. **纯本地回环通信**：Sidecar 守护进程与 Webview 桥接 100% 绑定 `127.0.0.1`，拒绝任何公网访问；
 3. **敏感凭据与正文隔离**：仅读取模型名称与数值 Token 元数据，严禁持久化用户 Prompt 或对话上下文。

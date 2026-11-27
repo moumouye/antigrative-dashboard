@@ -94,7 +94,8 @@ Run management commands from your dashboard source folder (default: `~/.gemini/a
 
 | Action | Command | Description |
 | :--- | :--- | :--- |
-| **Inspect Status** | `python manage.py status` | Check installation path, integration mode, and connection health |
+| **Inspect Status** | `python manage.py status` | Check installation path, integration mode, CDP bootstrap, and health |
+| **Setup / Repair CDP** | `python manage.py setup-cdp` | Reconfigure shared non-invasive CDP launcher (macOS Launcher / Win shortcuts) |
 | **Disable** | `python manage.py disable` | Temporarily disable the widget on next poll |
 | **Enable** | `python manage.py enable` | Re-enable the widget in conversation views |
 | **Uninstall** | `python manage.py uninstall` | Safely remove the plugin and restore configuration (backups preserved) |
@@ -123,11 +124,12 @@ python manage.py install-cli   # Install the CLI adapter
 ## ❓ FAQ
 
 <details>
-<summary><strong>Q: The status bar does not appear after installation?</strong></summary>
+<summary><strong>Q: The status bar does not appear after installation? (Loopback CDP Bootstrap)</strong></summary>
 
-1. Ensure Antigravity is **fully quit and reopened** (verify no lingering tray processes).
-2. Run `python manage.py status` in your terminal to check adapter health.
-3. Open an existing or new conversation; the widget mounts right beside the model selector.
+Recent Antigravity desktop builds disable remote debugging by default unless `--remote-debugging-port` is passed at startup. The installer configures a **shared, non-invasive external CDP bootstrap (`compat/cdp_bootstrap.py`)** without touching `Antigravity.app` or `resources/app.asar`:
+1. **macOS**: Installs a login agent (`com.moumouye.antigravity-cdp`) and `/Applications/Antigravity Launcher.app`. After quitting Antigravity, launch via **Antigravity Launcher** (consider replacing the original Dock icon with it).
+2. **Windows**: Appends `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1` to Antigravity shortcuts on Desktop, Start Menu, and Taskbar. If a pinned taskbar shortcut uses stale cached args, unpin and re-pin it from Desktop; after major client updates, run `python manage.py setup-cdp` to re-apply.
+3. Run `python manage.py status` to verify `cdpBootstrap.cdpReady` is `true`.
 </details>
 
 <details>

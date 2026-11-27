@@ -128,7 +128,7 @@ ide/package.json  --> "version": "X.Y.Z"
 | 配置位置 | 约束对象 | 白名单形式 |
 | :--- | :--- | :--- |
 | `ide/package.py:10-14` | VSIX 扩展包 | `MODULES = [...]` 硬编码路径数组 |
-| `manage.py:DIST_FILES` | 桌面端分发 Zip | `DIST_FILES = [...]` 字典列举 |
+| `manage.py:DIST_FILES` | 桌面端分发 Zip | `DIST_FILES = [...]` 字典列举（含 `compat/cdp_bootstrap.py` 共享 CDP 引导模块） |
 | `tools/check-update-cwd.mjs` | 更新链路校验 | 完整性文件清单校验 |
 
 ---
