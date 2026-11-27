@@ -65,7 +65,16 @@ try{await mkdir(join(repo,'.data/issue25-validation'),{recursive:true});
  assert.equal(await strip.locator('#five-balance').textContent(),'70.0%');
  await page.evaluate(()=>document.querySelector('.composer').style.maxWidth='');await page.selectOption('#scenario','limited');
  await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.dataset.collection==='limited');
- await page.keyboard.press('Escape');await page.evaluate(()=>document.querySelector('.composer').style.maxWidth='260px');await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.classList.contains('icons-only'));
+ await page.keyboard.press('Escape');await page.evaluate(()=>document.querySelector('.composer').style.maxWidth='260px');
+ try{
+  await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.classList.contains('icons-only'));
+ }catch(error){
+  const diag=await page.evaluate(()=>{
+   const n=document.getElementById('ag-pulse-status-bar'),b=n?.shadowRoot?.querySelector('.bar'),r=document.querySelector('.actions'),c=document.querySelector('.composer');
+   return {lang:n?.lang,connected:n?.isConnected,className:n?.className,dataset:{...(n?.dataset||{})},composerMaxW:c?.style?.maxWidth,composerRect:c?.getBoundingClientRect(),rowRect:r?.getBoundingClientRect(),nodeRect:n?.getBoundingClientRect(),barScroll:b?.scrollWidth,barClient:b?.clientWidth,chips:[...(b?.querySelectorAll('.chip')||[])].map(el=>({card:el.dataset.card,hidden:el.hidden,w:el.getBoundingClientRect().width,text:el.textContent}))};
+  });
+  throw new Error(`Narrow icons-only timeout (${lang}): ${JSON.stringify(diag)}`,{cause:error});
+ }
  assert.equal(await strip.locator('.bar .collection-warning').isVisible(),true);assert.equal(await strip.locator('.bar .collection-label').isVisible(),false);assert.equal(await strip.locator('.bar .chip').count(),3);
  await strip.locator('[data-card=context]').click();assert.equal(await strip.locator('#context-summary').textContent(),'—');assert.equal(await strip.locator('#five-balance').textContent(),'70.0%');
  await page.keyboard.press('Escape');await page.click('#theme');await page.waitForFunction(()=>document.getElementById('ag-pulse-status-bar')?.getAttribute('data-pulse-theme')==='light');await strip.locator('[data-card=context]').click();assert.equal(await strip.locator('#context-card .collection-notice').isVisible(),true);
